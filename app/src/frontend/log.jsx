@@ -20,11 +20,9 @@ import ForgeReconciler, {
   Tab,
   TabPanel,
   Textfield,
-  TextArea,
   Select,
   Label,
   HelperMessage,
-  Toggle,
   Modal,
   ModalBody,
   ModalFooter,
@@ -39,7 +37,7 @@ import ForgeReconciler, {
   xcss,
 } from '@forge/react';
 import { invoke, rovo, view } from '@forge/bridge';
-import { AGENT, APP_ID, cardStyle, subtleStyle, DecisionId, DecisionStatus, DecisionMeta, Guardrails, Quote, SectionTitle, Stat, formatDate, ago } from './ui';
+import { AGENT, APP_ID, cardStyle, subtleStyle, DecisionId, DecisionStatus, DecisionMeta, Guardrails, Quote, SectionTitle, Stat, formatDate } from './ui';
 
 const STATUS_OPTIONS = [
   { label: 'Active', value: 'active' },
