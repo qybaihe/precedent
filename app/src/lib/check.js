@@ -54,23 +54,26 @@ export function matchTerm(term, toks) {
   return -1;
 }
 
-const DESTINATION = new Set(['to', 'into', 'onto', 'with', 'on', 'in', 'using', 'via', 'adopt', 'introduc', 'add', 'us']);
+// Words right before a term that make it the thing being *introduced* ("move the ledger to MongoDB").
+const DESTINATION = new Set(['to', 'into', 'onto', 'with', 'on', 'in', 'using', 'via', 'adopt', 'introduc', 'add', 'us', 'install', 'enabl', 'run', 'spin', 'build', 'creat', 'deploy', 'integrat'].map(stem));
 const MOVEMENT = new Set(['migrat', 'move', 'switch', 'transfer', 'port', 'shift'].map(stem));
+const SKIPPABLE = new Set(['a', 'an', 'the', 'new', 'our', 'their', 'its', 'separate', 'own', 'last', 'remaining', 'all', 'old', 'legacy', 'existing', 'two', 'three', 'four', 'five', 'few', 'some', 'of', 'any']);
 
 /**
- * Is the matched term at `idx` being removed rather than introduced?
- *   "remove MongoDB", "drop the Mongo dependency", "migrate refunds off MongoDB" -> removal
- *   "migrate the ledger to MongoDB", "replace Postgres with MongoDB"            -> introduction
+ * Is the matched term at `idx` being removed rather than introduced? Walks backwards from the
+ * term to the nearest meaningful word:
+ *   "remove MongoDB", "drop the Mongo dependency", "migrate refunds off MongoDB",
+ *   "migrate the last Jenkins jobs to Pipelines"                             -> removal
+ *   "migrate the ledger to MongoDB", "replace Postgres with MongoDB", "add a Datadog agent" -> introduction
  */
 function isRemoval(toks, idx) {
-  const before = toks[idx - 1];
-  if (DESTINATION.has(before)) return false;
-  if ((before === 'from' || before === 'off') && toks.slice(Math.max(0, idx - 7), idx).some((t) => MOVEMENT.has(t))) return true;
-  for (let i = Math.max(0, idx - 5); i < idx; i++) {
-    if (REMOVAL_CUES.has(toks[i]) && !MOVEMENT.has(toks[i])) {
-      // "replace X with Y": X is removed; "replace Y with X": X is introduced (handled above)
-      return true;
-    }
+  for (let i = idx - 1; i >= Math.max(0, idx - 7); i--) {
+    const t = toks[i];
+    if (SKIPPABLE.has(t)) continue;
+    if (t === 'from' || t === 'off' || t === 'away' || t === 'without') return true;
+    if (DESTINATION.has(t)) return false;
+    if (MOVEMENT.has(t)) return true; // the term is what's being moved away
+    if (REMOVAL_CUES.has(t)) return true;
   }
   return false;
 }
@@ -188,7 +191,7 @@ export function checkWork(work, decisions, { acknowledged = [] } = {}) {
   const ranked = bm25(index, text);
   const top = ranked[0]?.score || 0;
   const related = ranked
-    .filter((r) => !hitIds.has(r.decision.id) && r.overlap.length >= 2 && r.score >= Math.max(2.5, top * 0.45))
+    .filter((r) => !hitIds.has(r.decision.id) && r.overlap.length >= 2 && r.score >= Math.max(3, top * 0.6))
     .slice(0, 4)
     .map((r) => ({ decision: summarizeDecision(r.decision), score: Number(r.score.toFixed(2)), overlap: r.overlap }));
 

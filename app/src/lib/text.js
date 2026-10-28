@@ -8,7 +8,8 @@ export const STOPWORDS = new Set(
   can could may might must do does did done have has had having not no so such than too very just also only all any each
   every some more most other another same own new about after before because while when where which who whom what why how
   there here up down out off again further once both few nor yet let lets get got make made use using used work item items
-  ticket issue task story epic bug need needs want wants please add adds adding team teams`
+  ticket issue task story epic bug need needs want wants please add adds adding team teams go goes going went through
+  via stay stays keep keeps see sees next last first like within without per across still already etc`
     .split(/\s+/)
     .filter(Boolean),
 );
