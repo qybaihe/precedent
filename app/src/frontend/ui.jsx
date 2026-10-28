@@ -124,7 +124,7 @@ export const Quote = ({ children }) => (
 export const SectionTitle = ({ children, count }) => (
   <Inline space="space.075" alignBlock="center">
     <Text weight="semibold" size="small" color="color.text.subtle">
-      {String(children).toUpperCase()}
+      {[].concat(children).join('').toUpperCase()}
     </Text>
     {count !== undefined ? <Lozenge>{String(count)}</Lozenge> : null}
   </Inline>

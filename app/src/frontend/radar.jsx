@@ -197,7 +197,7 @@ const App = () => {
         </Inline>
 
         <Stack space="space.150">
-          <SectionTitle count={decisions.length}>Decisions that apply to {projectKey}</SectionTitle>
+          <SectionTitle count={decisions.length}>{`Decisions that apply to ${projectKey}`}</SectionTitle>
           <Inline space="space.150" shouldWrap>
             {decisions.slice(0, 9).map((d) => (
               <Box key={d.id} xcss={xcss({ width: '380px' })}>
