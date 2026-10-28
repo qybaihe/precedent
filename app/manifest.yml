@@ -1,0 +1,367 @@
+app:
+  id: ari:cloud:ecosystem::app/92a37583-d5ab-4554-97dd-8e6d41617e28
+  runtime:
+    name: nodejs24.x
+    memoryMB: 512
+    architecture: arm64
+  compatibility:
+    jira:
+      required: true
+    confluence:
+      required: false
+
+modules:
+  # ---------------- Jira ----------------
+  jira:issueContext:
+    - key: precedent-issue-context
+      resource: issue-context
+      resolver:
+        function: resolver
+      render: native
+      title: Precedent
+      label: Decisions
+      dynamicProperties:
+        function: issue-context-status
+  jira:projectPage:
+    - key: precedent-radar
+      resource: radar
+      resolver:
+        function: resolver
+      render: native
+      title: Decision Radar
+  jira:globalPage:
+    - key: precedent-jira-log
+      resource: log
+      resolver:
+        function: resolver
+      render: native
+      title: Precedent — Decision Log
+  jira:entityProperty:
+    - key: precedent-issue-index
+      entityType: issue
+      propertyKey: precedent
+      values:
+        - path: conflictCount
+          type: number
+          searchAlias: precedentConflicts
+        - path: status
+          type: string
+          searchAlias: precedentStatus
+        - path: decisions
+          type: text
+          searchAlias: precedentDecisions
+
+  # ---------------- Confluence ----------------
+  confluence:globalPage:
+    - key: precedent-confluence-log
+      resource: log
+      resolver:
+        function: resolver
+      render: native
+      title: Precedent — Decision Log
+      route: decision-log
+  confluence:contentBylineItem:
+    - key: precedent-byline
+      resource: byline
+      resolver:
+        function: resolver
+      render: native
+      title: Precedent
+      tooltip: Decisions on this page tracked by Precedent
+      dynamicProperties:
+        function: byline-properties
+
+  # ---------------- Events & jobs ----------------
+  trigger:
+    - key: jira-issue-trigger
+      function: on-jira-issue
+      events:
+        - avi:jira:created:issue
+        - avi:jira:updated:issue
+      filter:
+        ignoreSelf: true
+    - key: jira-comment-trigger
+      function: on-jira-comment
+      events:
+        - avi:jira:commented:issue
+      filter:
+        ignoreSelf: true
+    - key: confluence-page-trigger
+      function: on-confluence-page
+      events:
+        - avi:confluence:created:page
+        - avi:confluence:updated:page
+  scheduledTrigger:
+    - key: daily-sweep-schedule
+      function: daily-sweep
+      interval: day
+  consumer:
+    - key: precedent-jobs-consumer
+      queue: precedent-jobs
+      function: run-job
+
+  # ---------------- Rovo ----------------
+  rovo:agent:
+    - key: precedent-agent
+      name: Precedent
+      description: Your team's decision memory. Finds what was already decided, who decided it and why, and checks new work against it.
+      prompt: resource:agent-prompt;agent.md
+      conversationStarters:
+        - Does this work item contradict any team decisions?
+        - Why did we choose PostgreSQL for payments, and who decided?
+        - What decisions are being contradicted in this project right now?
+        - "Record a decision: we will not support IE11 in the merchant dashboard."
+      followUpPrompt: Suggest 3 short follow-up questions about related decisions, their owners, or how to resolve a conflict.
+      actions:
+        - search-decisions
+        - get-decision
+        - check-work-item
+        - record-decision
+        - supersede-decision
+        - log-exception
+        - list-conflicts
+  rovo:mcp:
+    - key: precedent-mcp
+      name: Precedent decisions
+      tools:
+        - search-decisions
+        - get-decision
+        - check-work-item
+        - record-decision
+        - supersede-decision
+        - log-exception
+        - list-conflicts
+  action:
+    - key: search-decisions
+      name: Search team decisions
+      function: action-search
+      actionVerb: GET
+      description: >-
+        Search the team's decision register (decision pages, meeting notes, Jira comments) by topic.
+        Use for "have we decided", "why did we choose", "who decided", or before changing a technology, vendor or policy.
+      inputs:
+        query:
+          title: Topic
+          type: string
+          required: true
+          description: Words describing the topic, e.g. "payments database", "feature flags", "partner API access".
+        includeInactive:
+          title: Include superseded and archived
+          type: boolean
+          required: false
+          description: Set true to also return decisions that were superseded or archived (for history questions).
+    - key: get-decision
+      name: Get decision details
+      function: action-get
+      actionVerb: GET
+      description: >-
+        Get one decision by id (DEC-n) with its rationale, owner, source link, guardrails, exceptions, history, and the Jira work items that conflict with or follow it.
+      inputs:
+        decisionId:
+          title: Decision id
+          type: string
+          required: true
+          description: The decision id, e.g. DEC-3.
+    - key: check-work-item
+      name: Check work against decisions
+      function: action-check
+      actionVerb: GET
+      description: >-
+        Check a Jira work item, or a free-text plan for a code change, against active team decisions; returns conflicts with evidence.
+        Coding agents should call this with plan before architectural or dependency changes.
+      inputs:
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: Jira work item key such as PAY-12. Optional when viewing a work item.
+        plan:
+          title: Planned change
+          type: string
+          required: false
+          description: Plain-language description of the intended change, used when there is no work item (e.g. "move the payout ledger to MongoDB").
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key the plan belongs to, so project-scoped decisions apply.
+    - key: record-decision
+      name: Record a decision
+      function: action-record
+      actionVerb: CREATE
+      description: >-
+        Record a new team decision in the register. Use when the user states a decision ("we decided", "from now on", "we will not").
+        Write the statement as an instruction; include what to avoid and prefer when known.
+      inputs:
+        statement:
+          title: Decision
+          type: string
+          required: true
+          description: The decision in one or two sentences, e.g. "Use Stripe for card payments instead of Adyen."
+        title:
+          title: Short title
+          type: string
+          required: false
+          description: Short title, under 80 characters.
+        rationale:
+          title: Rationale
+          type: string
+          required: false
+          description: Why this was decided.
+        avoid:
+          title: Things to avoid
+          type: string
+          required: false
+          description: Comma-separated technologies, vendors or practices the decision rules out, e.g. "Adyen, homegrown flag systems".
+        prefer:
+          title: Things to prefer
+          type: string
+          required: false
+          description: Comma-separated things the decision mandates, e.g. "Stripe".
+        tags:
+          title: Tags
+          type: string
+          required: false
+          description: Comma-separated topic tags, e.g. "payments, security".
+        ownerName:
+          title: Owner
+          type: string
+          required: false
+          description: Name of the person accountable for the decision.
+        issueKey:
+          title: Related work item
+          type: string
+          required: false
+          description: Jira work item where the decision was made, if any.
+    - key: supersede-decision
+      name: Supersede a decision
+      function: action-supersede
+      actionVerb: UPDATE
+      description: >-
+        Replace an existing decision with a new one. The old decision is marked superseded and linked to the replacement. Only use after the user explicitly confirms.
+      inputs:
+        decisionId:
+          title: Decision to supersede
+          type: string
+          required: true
+          description: The id of the decision being replaced, e.g. DEC-3.
+        newStatement:
+          title: New decision
+          type: string
+          required: true
+          description: The replacement decision in one or two sentences.
+        reason:
+          title: Reason
+          type: string
+          required: true
+          description: Why the old decision no longer holds.
+        title:
+          title: Short title
+          type: string
+          required: false
+          description: Short title for the new decision.
+        avoid:
+          title: Things to avoid
+          type: string
+          required: false
+          description: Comma-separated things the new decision rules out.
+        prefer:
+          title: Things to prefer
+          type: string
+          required: false
+          description: Comma-separated things the new decision mandates.
+    - key: log-exception
+      name: Log a decision exception
+      function: action-exception
+      actionVerb: CREATE
+      description: >-
+        Record that one Jira work item knowingly deviates from a decision, with a reason. Clears the conflict for that work item only. Only use after the user explicitly confirms.
+      inputs:
+        decisionId:
+          title: Decision id
+          type: string
+          required: true
+          description: The decision the work item deviates from, e.g. DEC-3.
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: Jira work item key. Optional when viewing a work item.
+        reason:
+          title: Reason
+          type: string
+          required: true
+          description: Why the exception is acceptable, e.g. "throwaway spike, deleted after demo".
+    - key: list-conflicts
+      name: List open decision conflicts
+      function: action-conflicts
+      actionVerb: GET
+      description: >-
+        List Jira work items that currently contradict active decisions, optionally for one project.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key such as PAY. Leave empty for the whole site.
+
+  function:
+    - key: resolver
+      handler: index.handler
+    - key: issue-context-status
+      handler: index.issueContextStatus
+    - key: byline-properties
+      handler: index.bylineProperties
+    - key: on-jira-issue
+      handler: index.onJiraIssue
+    - key: on-jira-comment
+      handler: index.onJiraComment
+    - key: on-confluence-page
+      handler: index.onConfluencePage
+    - key: daily-sweep
+      handler: index.dailySweep
+    - key: run-job
+      handler: index.runJob
+      timeoutSeconds: 600
+    - key: action-search
+      handler: index.searchDecisions
+    - key: action-get
+      handler: index.getDecisionDetails
+    - key: action-check
+      handler: index.checkWorkItem
+    - key: action-record
+      handler: index.recordDecision
+    - key: action-supersede
+      handler: index.supersedeDecision
+    - key: action-exception
+      handler: index.logException
+    - key: action-conflicts
+      handler: index.listConflicts
+
+resources:
+  - key: issue-context
+    path: src/frontend/issue-context.jsx
+  - key: radar
+    path: src/frontend/radar.jsx
+  - key: log
+    path: src/frontend/log.jsx
+  - key: byline
+    path: src/frontend/byline.jsx
+  - key: agent-prompt
+    path: prompts
+
+permissions:
+  scopes:
+    - storage:app
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - read:confluence-content.all
+    - read:confluence-content.summary
+    - read:confluence-space.summary
+    - search:confluence
+    - write:confluence-content
+    - read:page:confluence
+    - write:page:confluence
+    - read:space:confluence
+    - read:label:confluence

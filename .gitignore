@@ -1,0 +1,21 @@
+# credentials — never commit
+.secrets/
+*.env
+.env*
+# local browser session used for demo recording
+.browser-profile/
+node_modules/
+tools/node_modules/
+demo/raw/
+demo/tmp/
+.DS_Store
+# internal planning docs (not part of the public repo)
+BRIEF.md
+STATUS.md
+IDEA.md
+SUBMISSION.md
+codegeist2026_*.txt
+demo/*.mp4
+demo/*.wav
+demo/*.aiff
+demo/frames/
