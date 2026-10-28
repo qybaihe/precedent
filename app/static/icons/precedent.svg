@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1D7AFC"/>
+      <stop offset="1" stop-color="#5E4DB2"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <!-- stacked records = memory of decisions -->
+  <rect x="15" y="14" width="30" height="7" rx="3.5" fill="#FFFFFF" opacity="0.45"/>
+  <rect x="15" y="25" width="30" height="7" rx="3.5" fill="#FFFFFF" opacity="0.7"/>
+  <!-- the decision that holds: bookmark with a check -->
+  <path d="M19 36h26v16l-13-6-13 6z" fill="#FFFFFF"/>
+  <path d="M26.5 41.5l4 4 7.5-7.5" fill="none" stroke="#5E4DB2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -19,3 +19,5 @@ demo/*.mp4
 demo/*.wav
 demo/*.aiff
 demo/frames/
+demo/narration/*.wav
+tools/probe-login.mjs

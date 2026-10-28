@@ -195,10 +195,13 @@ export function extractGuardrails(text) {
 
   // A term can't be both preferred and avoided; avoid wins only if it never appears as preferred.
   const preferSigs = new Set(prefer.map((t) => t.tokens.join(' ')));
-  return {
-    avoid: avoid.filter((t) => !preferSigs.has(t.tokens.join(' '))),
-    prefer,
-  };
+  // A technology the decision also *prefers* is not decisive on its own:
+  // "use the shared Redis cluster; do not run team-owned Redis instances" must not flag every Redis mention.
+  const preferTokens = new Set(prefer.flatMap((t) => t.tokens));
+  const refined = avoid
+    .filter((t) => !preferSigs.has(t.tokens.join(' ')))
+    .map((t) => (t.required.some((r) => preferTokens.has(r)) ? { ...t, required: t.required.filter((r) => !preferTokens.has(r)) } : t));
+  return { avoid: refined, prefer };
 }
 
 /** Build terms from a comma separated list typed by a human or provided by Rovo. */

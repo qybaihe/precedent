@@ -1,0 +1,1 @@
+All decisions live in one register, in Confluence and Jira, with editable guardrails, history, exceptions and supersession.

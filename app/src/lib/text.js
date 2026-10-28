@@ -79,6 +79,8 @@ export function normalize(text) {
   for (const [phrase, canonical] of PHRASE_ALIASES) {
     t = t.split(phrase).join(` ${canonical} `);
   }
+  // hyphenated compounds are one concept: "team-owned" -> "teamowned", "email-only" -> "emailonly"
+  t = t.replace(/([a-z0-9])-(?=[a-z])/g, '$1');
   return t;
 }
 

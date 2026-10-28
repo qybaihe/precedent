@@ -6,6 +6,7 @@ import * as actions from './actions.js';
 import { recheck } from './lib/checker.js';
 import { listDecisions, resetAll } from './lib/store.js';
 import { harvestConfluencePage } from './lib/harvest.js';
+import { createSampleData } from './sample.js';
 
 const OPS = {
   'search-decisions': actions.searchDecisions,
@@ -18,6 +19,7 @@ const OPS = {
   recheck: (p) => recheck(p),
   harvest: (p) => harvestConfluencePage(p.pageId),
   'list-all': () => listDecisions(),
+  sample: (p) => createSampleData(p),
   reset: () => resetAll().then(() => ({ reset: true })),
 };
 

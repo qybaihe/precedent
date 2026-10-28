@@ -1,0 +1,1 @@
+Here is a new work item: move the payout ledger to MongoDB. Precedent checked it the moment it was written. It contradicts D E C one, keep all transactional payment data in PostgreSQL, and it shows the exact sentence that tripped the guardrail, who decided, and where.

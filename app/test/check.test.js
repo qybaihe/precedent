@@ -117,3 +117,9 @@ test('gerund objects after "never by"', () => {
   const d = [{ id: 'DEC-9', title: 'SFTP', statement: 'x', status: 'active', guardrails: g }];
   assert.equal(checkWork({ text: 'Give partner banks read-only DB credentials for reconciliation' }, d).conflicts[0]?.decision.id, 'DEC-9');
 });
+
+test('a technology the decision also prefers is not decisive on its own', () => {
+  const d = [decision('DEC-8', 'Shared Redis', 'Caching goes through the shared Redis cluster managed by Platform; do not run team-owned Redis instances.')];
+  assert.equal(checkWork({ text: 'Spin up a team-owned Redis instance for search autocomplete' }, d).conflicts[0]?.decision.id, 'DEC-8');
+  assert.equal(checkWork({ text: 'Build a feature flag service backed by Redis' }, d).conflicts.length, 0);
+});

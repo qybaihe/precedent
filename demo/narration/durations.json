@@ -1,0 +1,47 @@
+[
+ {
+  "scene": 1,
+  "seconds": 14.27,
+  "text": "Every team has had this moment. Wait \u2014 didn't we already decide not to do that? Decisions live in meeting notes and decision pages. Months later, new work, or an AI coding agent, quietly undoes them. Precedent fixes that."
+ },
+ {
+  "scene": 2,
+  "seconds": 13.21,
+  "text": "There is no new process. Teams keep typing slash decision in their meeting notes. Precedent captures every decision, with its owner, date, rationale and source, and shows right on the page which Jira work contradicts it."
+ },
+ {
+  "scene": 3,
+  "seconds": 16.73,
+  "text": "Here is a new work item: move the payout ledger to MongoDB. Precedent checked it the moment it was written. It contradicts D E C one, keep all transactional payment data in PostgreSQL, and it shows the exact sentence that tripped the guardrail, who decided, and where."
+ },
+ {
+  "scene": 4,
+  "seconds": 11.1,
+  "text": "It works live. Integrating Adyen? Flagged against the decision to standardize on Stripe. And it understands direction. Removing MongoDB is aligned with the decision, not a conflict."
+ },
+ {
+  "scene": 5,
+  "seconds": 11.97,
+  "text": "Ask Precedent hands the context to the Rovo agent. It explains why the decision was made, who to talk to, and the options: comply, log an exception with a reason, or supersede the decision."
+ },
+ {
+  "scene": 6,
+  "seconds": 9.98,
+  "text": "Leads get a Decision Radar for every project. And every result is indexed, so precedent conflicts greater than zero works in J Q L, filters and dashboards."
+ },
+ {
+  "scene": 7,
+  "seconds": 14.47,
+  "text": "Because Precedent exposes the same actions through Atlassian's MCP server, AI coding agents check team decisions before they write code. Claude Code calls check work item, finds D E C one, and proposes a compliant design instead."
+ },
+ {
+  "scene": 8,
+  "seconds": 7.9,
+  "text": "All decisions live in one register, in Confluence and Jira, with editable guardrails, history, exceptions and supersession."
+ },
+ {
+  "scene": 9,
+  "seconds": 9.27,
+  "text": "Precedent. One Forge app across Jira, Confluence, Rovo and MCP, so your team, and your agents, know what has already been decided."
+ }
+]

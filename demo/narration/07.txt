@@ -1,0 +1,1 @@
+Because Precedent exposes the same actions through Atlassian's MCP server, AI coding agents check team decisions before they write code. Claude Code calls check work item, finds D E C one, and proposes a compliant design instead.

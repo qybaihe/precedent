@@ -116,8 +116,17 @@ export async function createSampleData({ spaceId, projectKey }) {
   const out = { pages: [], issues: [], decisions: 0 };
   if (spaceId) {
     for (const page of SAMPLE_PAGES) {
-      // eslint-disable-next-line no-await-in-loop
-      const created = await createPage({ spaceId, title: `${page.title} (sample ${Date.now().toString(36).slice(-4)})`, adf: page.adf });
+      // Page titles are unique per space, so number repeated sample runs.
+      let created = null;
+      for (let attempt = 1; !created && attempt <= 5; attempt++) {
+        const title = attempt === 1 ? `${page.title} (sample)` : `${page.title} (sample ${attempt})`;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          created = await createPage({ spaceId, title, adf: page.adf });
+        } catch (e) {
+          if (e.status !== 400 || attempt === 5) throw e;
+        }
+      }
       out.pages.push({ id: created.id, title: created.title });
       // Harvest right away instead of waiting for the page trigger, so the log fills instantly.
       // eslint-disable-next-line no-await-in-loop
