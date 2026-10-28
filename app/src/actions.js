@@ -69,7 +69,7 @@ export async function searchDecisions(payload) {
   const all = await listDecisions();
   const pool = includeInactive ? all : all.filter((d) => d.status === 'active');
   if (!query) return { total: pool.length, decisions: pool.slice(0, 10).map(brief) };
-  const ranked = bm25(buildIndex(pool), query).slice(0, 6);
+  const ranked = bm25(buildIndex(pool), query, { expand: true }).slice(0, 6);
   return {
     query,
     total: ranked.length,

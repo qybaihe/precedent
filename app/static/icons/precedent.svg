@@ -10,6 +10,6 @@
   <rect x="15" y="14" width="30" height="7" rx="3.5" fill="#FFFFFF" opacity="0.45"/>
   <rect x="15" y="25" width="30" height="7" rx="3.5" fill="#FFFFFF" opacity="0.7"/>
   <!-- the decision that holds: bookmark with a check -->
-  <path d="M19 36h26v16l-13-6-13 6z" fill="#FFFFFF"/>
-  <path d="M26.5 41.5l4 4 7.5-7.5" fill="none" stroke="#5E4DB2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 35h28v19l-14-5.5-14 5.5z" fill="#FFFFFF"/>
+  <path d="M25.5 40.5l4.5 4.5 8.5-8.5" fill="none" stroke="#5E4DB2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

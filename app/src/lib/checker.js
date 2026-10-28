@@ -69,6 +69,16 @@ export async function recheck({ jql = 'updated >= -90d ORDER BY updated DESC', m
   return { checked, conflicts };
 }
 
+/** Queue a background re-check. Never fails the caller: a missed re-check is caught by the daily sweep. */
 export async function enqueueRecheck(jql) {
-  await jobs.push({ body: { type: 'recheck', jql } });
+  const body = jql ? { type: 'recheck', jql } : { type: 'recheck' };
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await jobs.push({ body });
+      return true;
+    } catch (e) {
+      console.warn(`enqueue recheck failed (attempt ${attempt}): ${e.message}`);
+    }
+  }
+  return false;
 }

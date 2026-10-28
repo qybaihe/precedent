@@ -97,8 +97,26 @@ function evidence(text, term) {
 // ---------- BM25 relevance ----------
 
 function decisionDocument(d) {
-  return [d.title, d.title, d.statement, d.rationale || '', (d.tags || []).join(' '), (d.tags || []).join(' ')].join(' ');
+  const heading = d.source?.heading || '';
+  return [d.title, d.title, heading, heading, d.statement, d.rationale || '', (d.tags || []).join(' '), (d.tags || []).join(' ')].join(' ');
 }
+
+// Light query expansion so "payments database" finds the PostgreSQL decision.
+const EXPANSIONS = {
+  databas: ['postgres', 'mongodb', 'sql', 'storag'],
+  storag: ['stor', 'databas'],
+  stor: ['storag'],
+  cach: ['redis'],
+  flag: ['featureflag', 'launchdarkly'],
+  featureflag: ['launchdarkly'],
+  log: ['logg'],
+  tracing: ['opentelemetry', 'apm'],
+  trac: ['opentelemetry', 'apm'],
+  ci: ['jenkin', 'pipelin'],
+  mobil: ['reactnative', 'flutter'],
+  card: ['strip', 'adyen'],
+  processor: ['strip', 'adyen'],
+};
 
 export function buildIndex(decisions) {
   const docs = decisions.map((d) => ({ d, toks: tokenize(decisionDocument(d)) }));
@@ -108,8 +126,11 @@ export function buildIndex(decisions) {
   return { docs, df, avgLen, n: docs.length };
 }
 
-export function bm25(index, queryText, { k1 = 1.2, b = 0.75 } = {}) {
-  const q = [...new Set(tokenize(queryText))];
+export function bm25(index, queryText, { k1 = 1.2, b = 0.75, expand = false } = {}) {
+  const base = [...new Set(tokenize(queryText))];
+  const extra = expand ? base.flatMap((t) => EXPANSIONS[t] || []).filter((t) => !base.includes(t)) : [];
+  const weights = new Map([...base.map((t) => [t, 1]), ...extra.map((t) => [t, 0.5])]);
+  const q = [...weights.keys()];
   return index.docs
     .map(({ d, toks }) => {
       const tf = new Map();
@@ -119,10 +140,10 @@ export function bm25(index, queryText, { k1 = 1.2, b = 0.75 } = {}) {
       for (const t of q) {
         const f = tf.get(t);
         if (!f) continue;
-        overlap.push(t);
+        if (weights.get(t) === 1) overlap.push(t);
         const df = index.df.get(t) || 0;
         const idf = Math.log(1 + (index.n - df + 0.5) / (df + 0.5));
-        score += idf * ((f * (k1 + 1)) / (f + k1 * (1 - b + (b * toks.length) / index.avgLen)));
+        score += weights.get(t) * idf * ((f * (k1 + 1)) / (f + k1 * (1 - b + (b * toks.length) / index.avgLen)));
       }
       return { decision: d, score, overlap };
     })

@@ -4,7 +4,8 @@
 
 import * as actions from './actions.js';
 import { recheck } from './lib/checker.js';
-import { listDecisions, resetAll } from './lib/store.js';
+import { listDecisions, resetAll, deleteDecision, getDecision, saveDecision } from './lib/store.js';
+import { checkIssue } from './lib/checker.js';
 import { harvestConfluencePage } from './lib/harvest.js';
 import { createSampleData } from './sample.js';
 
@@ -21,6 +22,16 @@ const OPS = {
   'list-all': () => listDecisions(),
   sample: (p) => createSampleData(p),
   reset: () => resetAll().then(() => ({ reset: true })),
+  // undo what scripts/e2e.mjs created
+  cleanup: async ({ removeIds = [], clearExceptions = {} }) => {
+    for (const id of removeIds) await deleteDecision(id);
+    for (const [id, issueKey] of Object.entries(clearExceptions)) {
+      const d = await getDecision(id);
+      if (d) await saveDecision({ ...d, exceptions: (d.exceptions || []).filter((e) => e.issueKey !== issueKey), history: (d.history || []).filter((h) => !/E2E/.test(h.what)) });
+      await checkIssue(issueKey);
+    }
+    return { ok: true };
+  },
 };
 
 export async function selftest(request) {
