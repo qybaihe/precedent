@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Claude Code — Precedent MCP</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d1117; }
+  body { font-family: "SF Mono", Menlo, Consolas, monospace; color: #e6edf3; font-size: 21px; line-height: 1.5; }
+  .bar { height: 38px; background: #161b22; display: flex; align-items: center; padding: 0 16px; gap: 8px; border-bottom: 1px solid #30363d; }
+  .dot { width: 13px; height: 13px; border-radius: 50%; }
+  .title { margin-left: 14px; color: #8b949e; font-size: 15px; font-family: -apple-system, sans-serif; }
+  #term { padding: 22px 34px; height: calc(100% - 82px); overflow: hidden; }
+  .box { border: 1px solid #d97757; border-radius: 8px; padding: 10px 16px; color: #e6edf3; margin-bottom: 18px; }
+  .muted { color: #8b949e; }
+  .prompt { color: #e6edf3; }
+  .prompt::before { content: "> "; color: #8b949e; }
+  .tool { margin: 14px 0 4px; }
+  .tool .dotc { color: #3fb950; }
+  .tool .name { font-weight: 700; }
+  .tool .args { color: #8b949e; }
+  .result { color: #8b949e; margin-left: 28px; white-space: pre-wrap; border-left: 2px solid #30363d; padding-left: 12px; }
+  .assistant { margin-top: 14px; white-space: pre-wrap; }
+  .assistant::before { content: "⏺ "; color: #e6edf3; }
+  .hl { color: #ff7b72; font-weight: 700; }
+  .ok { color: #3fb950; font-weight: 700; }
+  .cursor { display: inline-block; width: 11px; height: 22px; background: #e6edf3; vertical-align: -4px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .spinner { color: #d97757; }
+</style>
+</head>
+<body>
+<div class="bar"><span class="dot" style="background:#ff5f56"></span><span class="dot" style="background:#ffbd2e"></span><span class="dot" style="background:#27c93f"></span><span class="title">~/code/lumen-ledger — claude</span></div>
+<div id="term"></div>
+<script>
+// transcript.js defines window.TRANSCRIPT = [{type:'user'|'tool'|'result'|'assistant', text, name, args}]
+</script>
+<script src="transcript.js"></script>
+<script>
+const term = document.getElementById('term');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function emph(s) {
+  return esc(s)
+    .replace(/(DEC-\d+)/g, '<span class="hl">$1</span>')
+    .replace(/\b(conflict|contradicts?)\b/gi, '<span class="hl">$1</span>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+}
+async function typeInto(el, text, cps = 38) {
+  const cur = document.createElement('span'); cur.className = 'cursor'; el.appendChild(cur);
+  for (const ch of text) { cur.insertAdjacentText('beforebegin', ch); await sleep(1000 / cps); }
+  cur.remove();
+}
+async function streamInto(el, text, wps = 14) {
+  const words = text.split(/(\s+)/);
+  let acc = '';
+  for (const w of words) { acc += w; el.innerHTML = emph(acc); term.scrollTop = term.scrollHeight; await sleep(w.trim() ? 1000 / wps : 0); }
+}
+(async () => {
+  const head = document.createElement('div'); head.className = 'box';
+  head.innerHTML = '<b>✻ Claude Code</b><br><span class="muted">MCP: precedent · connected (mcp.atlassian.com/forge/92a37583…)</span>';
+  term.appendChild(head);
+  await sleep(900);
+  for (const step of window.TRANSCRIPT || []) {
+    if (step.type === 'user') {
+      const p = document.createElement('div'); p.className = 'prompt'; term.appendChild(p);
+      await typeInto(p, step.text);
+      await sleep(700);
+      const sp = document.createElement('div'); sp.className = 'spinner'; sp.textContent = '✻ Thinking…'; term.appendChild(sp);
+      await sleep(1400); sp.remove();
+    } else if (step.type === 'tool') {
+      const t = document.createElement('div'); t.className = 'tool';
+      t.innerHTML = `<span class="dotc">⏺</span> <span class="name">${esc(step.name)}</span> <span class="args">(${esc(step.args)})</span>`;
+      term.appendChild(t); await sleep(1300);
+    } else if (step.type === 'result') {
+      const r = document.createElement('div'); r.className = 'result'; r.innerHTML = emph(step.text); term.appendChild(r); await sleep(1800);
+    } else if (step.type === 'assistant') {
+      const a = document.createElement('div'); a.className = 'assistant'; term.appendChild(a);
+      await streamInto(a, step.text);
+      await sleep(600);
+    }
+    term.scrollTop = term.scrollHeight;
+  }
+  document.title = 'DONE';
+})();
+</script>
+</body>
+</html>

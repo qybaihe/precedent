@@ -1,1 +1,1 @@
-It works live. Integrating Adyen? Flagged against the decision to standardize on Stripe. And it understands direction. Removing MongoDB is aligned with the decision, not a conflict.
+It works live. Integrating Adyen? Flagged against the decision to standardize on Stripe. And it understands direction: removing MongoDB is aligned with the decision, not a conflict.

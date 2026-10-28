@@ -1,1 +1,1 @@
-All decisions live in one register, in Confluence and Jira, with editable guardrails, history, exceptions and supersession.
+Everything lives in one decision log, in Confluence and Jira, with editable guardrails, history, exceptions and supersession, plus one click sample content, so a new team sees value in a minute.

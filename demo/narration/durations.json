@@ -1,28 +1,28 @@
 [
  {
   "scene": 1,
-  "seconds": 14.27,
-  "text": "Every team has had this moment. Wait \u2014 didn't we already decide not to do that? Decisions live in meeting notes and decision pages. Months later, new work, or an AI coding agent, quietly undoes them. Precedent fixes that."
+  "seconds": 17.72,
+  "text": "Every team has had this moment: wait, didn't we already decide not to do that? Decisions live in meeting notes and decision pages. Months later, new work, or an AI coding agent, quietly undoes them. Precedent gives your team, and your agents, a memory of what has already been decided."
  },
  {
   "scene": 2,
-  "seconds": 13.21,
-  "text": "There is no new process. Teams keep typing slash decision in their meeting notes. Precedent captures every decision, with its owner, date, rationale and source, and shows right on the page which Jira work contradicts it."
+  "seconds": 16.48,
+  "text": "There is no new process. Teams keep typing slash decision in their meeting notes and decision pages, or start a Jira comment with Decision. Precedent captures every decision, with its owner, date, rationale and source, and shows right on the page which Jira work contradicts it."
  },
  {
   "scene": 3,
-  "seconds": 16.73,
-  "text": "Here is a new work item: move the payout ledger to MongoDB. Precedent checked it the moment it was written. It contradicts D E C one, keep all transactional payment data in PostgreSQL, and it shows the exact sentence that tripped the guardrail, who decided, and where."
+  "seconds": 17.21,
+  "text": "Here is a new work item: move the payout ledger to MongoDB. Precedent checked it the moment it was written. It contradicts D E C one: keep all transactional payment data in PostgreSQL. It shows the exact sentence that tripped the guardrail, who decided, when, and where."
  },
  {
   "scene": 4,
-  "seconds": 11.1,
-  "text": "It works live. Integrating Adyen? Flagged against the decision to standardize on Stripe. And it understands direction. Removing MongoDB is aligned with the decision, not a conflict."
+  "seconds": 11.07,
+  "text": "It works live. Integrating Adyen? Flagged against the decision to standardize on Stripe. And it understands direction: removing MongoDB is aligned with the decision, not a conflict."
  },
  {
   "scene": 5,
-  "seconds": 11.97,
-  "text": "Ask Precedent hands the context to the Rovo agent. It explains why the decision was made, who to talk to, and the options: comply, log an exception with a reason, or supersede the decision."
+  "seconds": 14.71,
+  "text": "Ask Precedent hands the context to the Rovo agent. It explains why the decision was made, who to talk to, and the options: comply, log an exception with a reason, or supersede the decision. Every answer cites the decision and its source."
  },
  {
   "scene": 6,
@@ -31,13 +31,13 @@
  },
  {
   "scene": 7,
-  "seconds": 14.47,
-  "text": "Because Precedent exposes the same actions through Atlassian's MCP server, AI coding agents check team decisions before they write code. Claude Code calls check work item, finds D E C one, and proposes a compliant design instead."
+  "seconds": 19.41,
+  "text": "Because Precedent exposes the same actions through Atlassian's MCP server, AI coding agents check team decisions before they write code. Here, Claude Code calls check work item, finds D E C one, and proposes a compliant design instead. An open source skill file teaches any coding agent to do this by default."
  },
  {
   "scene": 8,
-  "seconds": 7.9,
-  "text": "All decisions live in one register, in Confluence and Jira, with editable guardrails, history, exceptions and supersession."
+  "seconds": 12.23,
+  "text": "Everything lives in one decision log, in Confluence and Jira, with editable guardrails, history, exceptions and supersession, plus one click sample content, so a new team sees value in a minute."
  },
  {
   "scene": 9,

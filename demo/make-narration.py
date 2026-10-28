@@ -7,7 +7,7 @@ rows = [l for l in script.splitlines() if re.match(r'^\| \d+ \|', l)]
 out = []
 for row in rows:
     cells = [c.strip() for c in row.strip('|').split('|')]
-    n, text = int(cells[0]), cells[2]
+    n, text = int(cells[0]), cells[1]
     aiff = root / 'narration' / f'{n:02d}.aiff'
     wav = root / 'narration' / f'{n:02d}.wav'
     subprocess.run(['say', '-v', 'Samantha', '-r', '178', '-o', str(aiff), text], check=True)

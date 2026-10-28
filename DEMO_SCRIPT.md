@@ -1,25 +1,110 @@
-# Precedent — demo video script (target 2:45)
+# Precedent — demo video script (target 2:40, hard limit < 3:00)
 
-Voice: macOS `say -v Samantha` (rate 180). Screen: 1440×900 Chromium recording of the live dev site
-`qybaihe-forge.atlassian.net` (Lumen Pay demo org), plus a recorded Claude Code session for MCP.
-The narration lines below are the exact TTS input (`demo/narration/*.txt` is generated from this file).
+Recorded on the live site `https://qybaihe-forge.atlassian.net` (production install of Precedent, demo org "Lumen Pay")
+at 1440×900, light theme, browser zoom 100 %. Voice-over: macOS `say -v Samantha -r 178`, generated per scene from the
+**Narration** table below (`python3 demo/make-narration.py` → `demo/narration/NN.wav`; durations in `durations.json`).
+Each scene is recorded as its own clip and must last at least as long as its narration (+1 s);
+`python3 demo/compose.py` trims, lays the narration over each clip, crossfades and writes `demo/precedent-demo.mp4`.
 
-| # | Scene (what is on screen) | Narration | ~sec |
-|---|---|---|---|
-| 1 | **Title card**: "Precedent — decision memory for your team and your AI agents". | Every team has had this moment. Wait — didn't we already decide not to do that? Decisions live in meeting notes and decision pages. Months later, new work, or an AI coding agent, quietly undoes them. Precedent fixes that. | 15 |
-| 2 | **Confluence** → *Payments Architecture Review — 2026-03-12*. Scroll past the four `/decision` items. Click the byline item "4 decisions · N conflicts" → popup lists each decision and the Jira work items contradicting it. | There is no new process. Teams keep typing slash decision in their meeting notes. Precedent captures every decision, with its owner, date, rationale and source, and shows right on the page which Jira work contradicts it. | 17 |
-| 3 | **Jira** → PAY-1 "Store payout ledger in MongoDB for flexible schemas". Right panel button **Precedent** shows red "1 conflict" → expand. Hover the evidence box and source link. | Here is a new work item: move the payout ledger to MongoDB. Precedent checked it the moment it was written. It contradicts D E C one, keep all transactional payment data in PostgreSQL, and it shows the exact sentence that tripped the guardrail, who decided, and where. | 19 |
-| 4 | **Live create**: Create work item in PAY "Integrate Adyen for EU card payments" → open it → panel flags DEC-3 (Stripe instead of Adyen). Then open PAY-4 "Remove MongoDB from the refunds service" → green "Aligned". | It works live. Integrating Adyen? Flagged against the decision to standardize on Stripe. And it understands direction. Removing MongoDB is aligned with the decision, not a conflict. | 16 |
-| 5 | **Rovo**: on PAY-1 click **Ask Precedent** → Rovo chat opens with the pre-filled prompt → agent answers: why (ACID, nightly SQL audits), owner Priya Shah, options (follow / exception / supersede). | Ask Precedent hands the context to the Rovo agent. It explains why the decision was made, who to talk to, and the options: comply, log an exception with a reason, or supersede the decision. | 20 |
-| 6 | **Decision Radar** (PAY project page): stats, conflicts table, donut. Then Jira issue search with JQL `precedentConflicts > 0`. | Leads get a Decision Radar for every project. And every result is indexed, so precedent conflicts greater than zero works in J Q L, filters and dashboards. | 14 |
-| 7 | **Claude Code + MCP** (terminal recording): user asks "Store the payout ledger in MongoDB — check our team decisions first". Claude calls `precedent · check-work-item` over MCP → conflict DEC-1 → proposes PostgreSQL with JSONB columns instead and offers to record or escalate. | Because Precedent exposes the same actions through Atlassian's MCP server, AI coding agents check team decisions before they write code. Claude Code calls check work item, finds D E C one, and proposes a compliant design instead. | 22 |
-| 8 | **Decision Log** (Confluence global page): stats row, table of 12 decisions with guardrails, open the DEC-1 detail modal (work items touching it, history). | All decisions live in one register, in Confluence and Jira, with editable guardrails, history, exceptions and supersession. | 12 |
-| 9 | **Closing card**: "Precedent · Jira · Confluence · Rovo agent · MCP · Runs on Atlassian" + repo URL. | Precedent. One Forge app across Jira, Confluence, Rovo and MCP, so your team, and your agents, know what has already been decided. | 11 |
+## Narration (exact TTS input)
 
-Total ≈ 2:26 of narration + transitions ≈ 2:45.
+| # | Narration | Audio (s) |
+|---|---|---|
+| 1 | Every team has had this moment: wait, didn't we already decide not to do that? Decisions live in meeting notes and decision pages. Months later, new work, or an AI coding agent, quietly undoes them. Precedent gives your team, and your agents, a memory of what has already been decided. | 18 |
+| 2 | There is no new process. Teams keep typing slash decision in their meeting notes and decision pages, or start a Jira comment with Decision. Precedent captures every decision, with its owner, date, rationale and source, and shows right on the page which Jira work contradicts it. | 18 |
+| 3 | Here is a new work item: move the payout ledger to MongoDB. Precedent checked it the moment it was written. It contradicts D E C one: keep all transactional payment data in PostgreSQL. It shows the exact sentence that tripped the guardrail, who decided, when, and where. | 18 |
+| 4 | It works live. Integrating Adyen? Flagged against the decision to standardize on Stripe. And it understands direction: removing MongoDB is aligned with the decision, not a conflict. | 12 |
+| 5 | Ask Precedent hands the context to the Rovo agent. It explains why the decision was made, who to talk to, and the options: comply, log an exception with a reason, or supersede the decision. Every answer cites the decision and its source. | 16 |
+| 6 | Leads get a Decision Radar for every project. And every result is indexed, so precedent conflicts greater than zero works in J Q L, filters and dashboards. | 10 |
+| 7 | Because Precedent exposes the same actions through Atlassian's MCP server, AI coding agents check team decisions before they write code. Here, Claude Code calls check work item, finds D E C one, and proposes a compliant design instead. An open source skill file teaches any coding agent to do this by default. | 19 |
+| 8 | Everything lives in one decision log, in Confluence and Jira, with editable guardrails, history, exceptions and supersession, plus one click sample content, so a new team sees value in a minute. | 12 |
+| 9 | Precedent. One Forge app across Jira, Confluence, Rovo and MCP, so your team, and your agents, know what has already been decided. | 9 |
 
-## Recording notes
-- Theme: light. Zoom 100%. Hide the Rovo onboarding spotlight if it appears.
-- Data reset before recording: `node scripts/seed-demo.mjs --reset` (DEC numbers then match the script).
-- Scene 4 creates a real work item; delete it after recording (`PAY-7`).
-- Scene 7 is a real Claude Code session against the Precedent MCP endpoint, recorded with asciinema and rendered with agg.
+## Pre-flight (not recorded)
+
+1. Reset demo data so DEC numbers match this script:
+   `cd ~/hackathons/codegeist2026 && source ~/hackathons/.secrets/atlassian.env && node scripts/seed-demo.mjs --reset`
+   then wait ~60 s. Check: Jira search `precedentConflicts > 0` returns exactly **8** work items
+   (PAY-1, PAY-2, PAY-3, CHK-1, CHK-2, CHK-3, PLAT-1, PLAT-2).
+2. Rovo agent: top bar **Rovo / Chat** → agent selector → **Browse agents** → **Precedent** → **Enable** (once per user).
+   Send one throw-away question so the onboarding tips are dismissed.
+3. MCP for scene 7 (once): admin.atlassian.com → **Apps → Sites → qybaihe-forge → Connected apps → Precedent → Tools** → turn all
+   seven tools on. Then in a terminal:
+   `claude mcp add --transport http precedent https://mcp.atlassian.com/forge/92a37583-d5ab-4554-97dd-8e6d41617e28`,
+   start `claude`, run `/mcp` → *precedent* → Authenticate → choose `qybaihe-forge.atlassian.net` → Approve.
+4. Close every banner/toast in Jira and Confluence ("try the new navigation", cookie banners). Collapse the left sidebar in
+   Confluence for scene 2 if it covers the page byline.
+
+Base URLs (production environment id `1c85a2f4-e35c-49f7-bc7a-39674f4f24b0`, app id `92a37583-d5ab-4554-97dd-8e6d41617e28`):
+- Decision Log (Confluence): `https://qybaihe-forge.atlassian.net/wiki/apps/92a37583-d5ab-4554-97dd-8e6d41617e28/1c85a2f4-e35c-49f7-bc7a-39674f4f24b0/decision-log`
+- Decision Log (Jira): `https://qybaihe-forge.atlassian.net/jira/apps/92a37583-d5ab-4554-97dd-8e6d41617e28/1c85a2f4-e35c-49f7-bc7a-39674f4f24b0`
+- Confluence pages: space **ENG** (Engineering). Page ids change on every reseed — open by title from the space sidebar.
+
+## Shot list
+
+### Scene 1 — Title card (≥ 19 s)
+- Open `demo/cards/title.html` (local file, animates in over 3 s). Hold.
+- Expect: Precedent logo + "Decision memory for your team — and your AI agents." + chips.
+
+### Scene 2 — Decisions captured in Confluence (≥ 19 s)
+1. Open space ENG → page **Payments Architecture Review — 2026-03-12**.
+2. Wait for the page to render (title + attendees visible). Hold 2 s.
+3. Scroll slowly (≈ 400 px every 1.5 s) through *Payout ledger storage*, *Partner bank access*, *Card processing*, *Logging*:
+   each has a purple ✓ **decision** item.
+4. Scroll back to top. In the byline under the title click **4 decisions · 4 conflicts** (Precedent icon).
+5. Expect a dialog listing DEC-1…DEC-4, each with a red *conflict* lozenge and the work item that contradicts it
+   (DEC-1 → PAY-1, DEC-2 → PAY-2, DEC-3 → PAY-3, DEC-4 → CHK-1). Hold 3 s, close.
+
+### Scene 3 — A conflicting work item (≥ 19 s)
+1. Open `https://qybaihe-forge.atlassian.net/browse/PAY-1` (*Store payout ledger in MongoDB for flexible schemas*).
+2. In the right-hand details area find the app button **Decisions** with the red lozenge **1 conflict** (title *Precedent*) and click it.
+3. Expect: red section message **Contradicts 1 team decision**; card **DEC-1 · Keep all transactional payment data in PostgreSQL**,
+   quoted statement, pink evidence box *"Trips guardrail: avoid MongoDB" — "Move the ledger to MongoDB so we can iterate…"*,
+   meta line *Priya Shah · Mar 12, 2026 · Payments Architecture Review — 2026-03-12* (link).
+4. Hover the evidence box (1 s), then the source link (1 s). Do **not** click the buttons yet.
+
+### Scene 4 — Live check + direction awareness (≥ 13 s)
+1. Press `c` (or **+ Create**). Project **Payments (PAY)**, type **Task**, Summary: `Integrate Adyen for EU card payments`. Create.
+2. Open the new work item (PAY-7) from the success flag. Expand **Precedent**.
+3. Expect: **Contradicts 1 team decision** → **DEC-3 · Standardize on Stripe for card payments instead of Adyen** (Dana Kim).
+4. Open `/browse/PAY-4` (*Remove MongoDB from the refunds service*) → expand **Precedent**.
+5. Expect: blue/green message **Consistent with team decisions** and an **Aligned** card: *DEC-1 — Removes or replaces "MongoDB"*.
+   (After recording, delete PAY-7.)
+
+### Scene 5 — Rovo agent (≥ 17 s, allow up to 30 s for the answer)
+1. Back on PAY-1, expanded Precedent panel → click **Ask Precedent** (Rovo icon) on the DEC-1 card.
+2. Expect: Rovo chat opens on the right with agent **Precedent** and the prompt
+   *"Explain how PAY-1 conflicts with DEC-1 (…): why was it decided, who should I talk to, and what are my options?"*.
+3. Wait for the answer. Expect it to cite **DEC-1**, **Priya Shah**, **Mar 12, 2026**, link the architecture review page,
+   give the rationale (ACID transactions, nightly SQL audits, extra on-call runbook) and offer: comply (e.g. PostgreSQL JSONB),
+   log an exception, or supersede. Scroll the answer slowly once.
+
+### Scene 6 — Decision Radar + JQL (≥ 11 s)
+1. Open project **Payments** → sidebar **Decision Radar** (Apps section).
+2. Expect: stat tiles (Open conflicts **3**, Work items checked **6**…), table PAY-1/PAY-2/PAY-3 with DEC ids and evidence, donut chart.
+3. Click **Open in JQL** (or open `https://qybaihe-forge.atlassian.net/issues/?jql=precedentConflicts%20%3E%200%20ORDER%20BY%20key`).
+4. Expect the list view with the 8 conflicting work items. Hold 2 s.
+
+### Scene 7 — Claude Code over MCP (≥ 20 s)
+Terminal, large font (≥ 18 pt), dark theme, 1440×900 window. In `claude`:
+```
+I'm about to move the payout ledger to a MongoDB collection so the schema can evolve without migrations.
+Check our team decisions with the precedent tools first.
+```
+Expect Claude to call **precedent – check-work-item** (approve the tool call), report **conflict with DEC-1** (owner Priya Shah,
+source page), and propose a compliant design (PostgreSQL + JSONB column / migration tooling) instead of writing Mongo code.
+Recorded with `asciinema rec demo/raw/scene07.cast`, rendered with `agg --font-size 22 --theme monokai` → mp4.
+
+### Scene 8 — Decision Log (≥ 13 s)
+1. Open the Confluence **Decision Log** URL above.
+2. Expect: header *Decision Log*, tiles (Active decisions **12**, Open conflicts **8**, Work items aligned **3**, Captured from Confluence **11**),
+   table of DEC-12…DEC-1 with guardrail lozenges (green *prefer …*, red *avoid …*) and Impact lozenges.
+3. Click **DEC-1** → detail dialog: quote, Why, Guardrails, *Work items touching this decision* (PAY-1 conflict, PAY-4 aligned, PAY-5 related), History. Hold 3 s, close.
+4. Click tab **Setup & integrations** for 2 s (shows "Try it with sample content" and the MCP command).
+
+### Scene 9 — Closing card (≥ 10 s)
+- Open `demo/cards/closing.html`. Hold.
+
+## After recording
+- Delete PAY-7 (`DELETE /rest/api/3/issue/PAY-7`) and re-run `node scripts/seed-demo.mjs --reset` if anything else changed.
+- Compose: `python3 demo/compose.py` → `demo/precedent-demo.mp4` (check length 2:30–2:55).
