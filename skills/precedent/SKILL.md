@@ -42,7 +42,7 @@ Use it so you never quietly implement something the team already ruled out.
 > User: add a cache for merchant settings, use Redis
 >
 > Agent: calls `check-work-item` with plan "add a Redis cache for merchant settings" →
-> `related`: DEC-11 "Caching goes through the shared Redis cluster managed by Platform" →
+> `related`: DEC-8 "Caching goes through the shared Redis cluster managed by Platform" →
 > implements the cache against the shared cluster's connection settings and says so.
 
 ## Setup
