@@ -125,8 +125,8 @@ modules:
     - key: precedent-decisions-connector
       name: Precedent decisions
       icons:
-        light: resource:icons;precedent.svg
-        dark: resource:icons;precedent.svg
+        light: https://raw.githubusercontent.com/qybaihe/precedent/main/docs/precedent-icon.png
+        dark: https://raw.githubusercontent.com/qybaihe/precedent/main/docs/precedent-icon.png
       objectTypes:
         - atlassian:document
       capabilities:
