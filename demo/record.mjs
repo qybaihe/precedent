@@ -22,7 +22,11 @@ const ENV = '1c85a2f4-e35c-49f7-bc7a-39674f4f24b0';
 const DURATIONS = Object.fromEntries(
   JSON.parse(fs.readFileSync(path.join(HERE, 'narration', 'durations.json'), 'utf8')).map((d) => [d.scene, d.seconds]),
 );
-const VIEW = { width: 1440, height: 900 };
+// Native 1920x1080 frames with the browser zoomed to 120% (lays out like 1600x900, so UI text stays
+// large and crisp). Playwright's recorder captures CSS pixels, so deviceScaleFactor would not help.
+const VIEW = { width: 1920, height: 1080 };
+const ZOOM_LEVEL = 1.0; // Chrome zoom level = log1.2(factor): 1.0 -> 120 %
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 // A visible cursor + click ripple, because Playwright videos don't render the OS cursor.
 const CURSOR_SCRIPT = `
@@ -31,10 +35,10 @@ const CURSOR_SCRIPT = `
   const install = () => {
     const c = document.createElement('div');
     c.id = '__demo_cursor';
-    c.style.cssText = 'position:fixed;left:0;top:0;width:22px;height:22px;z-index:2147483647;pointer-events:none;transform:translate(-3px,-2px);transition:transform .02s';
+    c.style.cssText = 'position:fixed;left:0;top:0;width:22px;height:22px;z-index:2147483647;pointer-events:none;transform:translate(-3px,-2px);transition:transform .02s;display:none';
     c.innerHTML = '<svg width="22" height="22" viewBox="0 0 22 22"><path d="M3 2l14 9-6 1.4L8 19z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
     document.documentElement.appendChild(c);
-    addEventListener('mousemove', (e) => { c.style.left = e.clientX + 'px'; c.style.top = e.clientY + 'px'; }, true);
+    addEventListener('mousemove', (e) => { c.style.display = 'block'; c.style.left = e.clientX + 'px'; c.style.top = e.clientY + 'px'; }, true);
     addEventListener('mousedown', (e) => {
       const r = document.createElement('div');
       r.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;border-radius:50%;border:3px solid rgba(29,122,252,.85);width:10px;height:10px;left:'+(e.clientX-8)+'px;top:'+(e.clientY-8)+'px;transition:all .45s ease-out;opacity:1';
@@ -267,12 +271,26 @@ const order = (wanted.length ? wanted : [1, 2, 3, 4, 5, 6, 7, 8, 9]).filter((n) 
 const indexFile = path.join(RAW, 'scenes.json');
 const index = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, 'utf8')) : [];
 
-const ctx = await chromium.launchPersistentContext(path.join(ROOT, '.browser-profile'), {
-  headless: false,
-  viewport: VIEW,
+// Card/terminal scenes are local files: record them with a throwaway profile so they don't need (or
+// lock) the logged-in one. Headless by default (independent of the screen size); HEADED=1 to watch.
+const LOCAL_SCENES = new Set([1, 7, 9]);
+const profile = order.every((n) => LOCAL_SCENES.has(n)) ? path.join(TMP, 'card-profile') : path.join(ROOT, '.browser-profile');
+const prefsFile = path.join(profile, 'Default', 'Preferences');
+fs.mkdirSync(path.dirname(prefsFile), { recursive: true });
+const prefs = fs.existsSync(prefsFile) ? JSON.parse(fs.readFileSync(prefsFile, 'utf8')) : {};
+prefs.partition = { ...prefs.partition, default_zoom_level: { ...prefs.partition?.default_zoom_level, x: ZOOM_LEVEL } };
+fs.writeFileSync(prefsFile, JSON.stringify(prefs));
+const ctx = await chromium.launchPersistentContext(profile, {
+  channel: 'chromium',
+  headless: !process.env.HEADED,
+  // No viewport emulation: an emulated viewport taller than the (virtual) screen minus window chrome
+  // gets clipped in the screencast. Instead size the real window so its content area is exactly VIEW
+  // (headless window chrome is 87 px).
+  viewport: null,
+  userAgent: UA,
   recordVideo: { dir: RAW, size: VIEW },
   ignoreDefaultArgs: ['--enable-automation'],
-  args: ['--disable-blink-features=AutomationControlled', `--window-size=${VIEW.width},${VIEW.height + 90}`],
+  args: ['--disable-blink-features=AutomationControlled', `--window-size=${VIEW.width},${VIEW.height + 87}`],
 });
 await ctx.addInitScript(CURSOR_SCRIPT);
 for (const p of ctx.pages()) await p.close().catch(() => {});
@@ -311,3 +329,4 @@ for (const n of order) {
 index.sort((a, b) => a.scene - b.scene);
 fs.writeFileSync(indexFile, JSON.stringify(index, null, 1));
 await ctx.close();
+

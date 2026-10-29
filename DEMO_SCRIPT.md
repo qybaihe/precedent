@@ -1,10 +1,16 @@
 # Precedent — demo video script (target 2:40, hard limit < 3:00)
 
 Recorded on the live site `https://qybaihe-forge.atlassian.net` (production install of Precedent, demo org "Lumen Pay")
-at 1440×900, light theme, browser zoom 100 %. Voice-over: macOS `say -v Samantha -r 178`, generated per scene from the
+by `node demo/record.mjs` (Playwright, logged-in `.browser-profile`, headless): native **1920×1080** frames with the
+browser zoomed to **120 %** (the UI lays out like a 1600×900 screen, so text stays large and sharp), light theme, an
+injected visible cursor with click ripples. Voice-over: macOS `say -v Samantha -r 178`, generated per scene from the
 **Narration** table below (`python3 demo/make-narration.py` → `demo/narration/NN.wav`; durations in `durations.json`).
-Each scene is recorded as its own clip and must last at least as long as its narration (+1 s);
-`python3 demo/compose.py` trims, lays the narration over each clip, crossfades and writes `demo/precedent-demo.mp4`.
+Each scene is recorded as its own clip and lasts at least as long as its narration (+1.4 s);
+`python3 demo/compose.py` trims each clip to the moment its page was ready, lays the narration over it, crossfades
+(0.35 s), normalises loudness to −16 LUFS and writes `demo/precedent-demo.mp4` (H.264/AAC, 1080p30).
+
+Commands: `node demo/record.mjs` (all scenes) or `node demo/record.mjs 3 5` (re-take some); `SHOTS=1` saves debug
+screenshots to `demo/tmp/`, `HEADED=1` shows the browser. Scenes 1, 7 and 9 are local pages and use a throwaway profile.
 
 ## Narration (exact TTS input)
 
@@ -86,14 +92,16 @@ Base URLs (production environment id `1c85a2f4-e35c-49f7-bc7a-39674f4f24b0`, app
 4. Expect the list view with the 8 conflicting work items. Hold 2 s.
 
 ### Scene 7 — Claude Code over MCP (≥ 20 s)
-Terminal, large font (≥ 18 pt), dark theme, 1440×900 window. In `claude`:
+A real, non-interactive Claude Code session against the Precedent MCP server (`demo/mcp-session.sh` runs
+`claude -p` with the MCP bearer token from `tools/mcp-oauth.mjs`, captures stream-json, and `demo/make-transcript.py`
+turns it into `demo/cards/transcript.js`). `demo/cards/terminal.html` replays that transcript as a terminal at a readable
+pace — the tool calls, results and answer text are exactly what the session produced. Prompt:
 ```
 I'm about to move the payout ledger to a MongoDB collection so the schema can evolve without migrations.
 Check our team decisions with the precedent tools first.
 ```
 Expect Claude to call **precedent – check-work-item** (approve the tool call), report **conflict with DEC-1** (owner Priya Shah,
 source page), and propose a compliant design (PostgreSQL + JSONB column / migration tooling) instead of writing Mongo code.
-Recorded with `asciinema rec demo/raw/scene07.cast`, rendered with `agg --font-size 22 --theme monokai` → mp4.
 
 ### Scene 8 — Decision Log (≥ 13 s)
 1. Open the Confluence **Decision Log** URL above.

@@ -5,7 +5,7 @@ Inputs
   demo/raw/scenes.json          written by demo/record.mjs: [{scene, video, readyMs, endMs}]
   demo/narration/NN.wav         written by demo/make-narration.py
 Output
-  demo/precedent-demo.mp4       1440x900 (letterboxed to 1920x1080), H.264 + AAC
+  demo/precedent-demo.mp4       1920x1080 (recorded natively, browser zoom 120 %), H.264 + AAC
 
 Each scene clip starts when its page was ready, lasts max(recorded length, narration + padding),
 and gets its narration starting 0.4 s in. Scenes are joined with short crossfades.
@@ -41,7 +41,7 @@ for s in scenes:
     # video: trim, hold the last frame if narration runs longer, scale into 1920x1080
     vf = (
         f"trim=start={start:.3f},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={max(0, length - recorded) + 0.1:.3f},"
-        "scale=1920:-2:flags=lanczos,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x0b1220,fps=30,format=yuv420p"
+        "scale=1920:1080:force_original_aspect_ratio=decrease:flags=lanczos,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x0b1220,fps=30,format=yuv420p"
     )
     af = f"adelay={int(LEAD * 1000)}|{int(LEAD * 1000)},apad,atrim=0:{length:.3f}"
     run([
@@ -66,6 +66,8 @@ for i in range(1, len(parts)):
     v_prev, a_prev = v_out, a_out
     offset += parts[i][1] - XF
 final = ROOT / 'precedent-demo.mp4'
-run([*inputs, '-filter_complex', ';'.join(filters), '-map', f'[{v_prev}]', '-map', f'[{a_prev}]',
-     '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', str(final)])
+# normalise loudness for YouTube (~-14 LUFS target; -16 leaves headroom)
+filters.append(f'[{a_prev}]loudnorm=I=-16:TP=-1.5:LRA=11[aout]')
+run([*inputs, '-filter_complex', ';'.join(filters), '-map', f'[{v_prev}]', '-map', '[aout]',
+     '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', str(final)])
 print(f'wrote {final} ({dur(final):.1f}s)')
