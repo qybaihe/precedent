@@ -145,6 +145,18 @@ const fixes = {
   'PAY-9': { 'DEC-3': { kind: 'rewrite', decisionId: 'DEC-3', from: 'Adyen', to: 'Stripe', summary: { before: 'Integrate Adyen for EU card payments', after: 'Integrate Stripe for EU card payments' }, description: [], replacements: [{ find: 'Adyen', replace: 'Stripe' }], advice: 'Use Stripe instead of Adyen, as DEC-3 requires.' } },
   'PAY-1': { 'DEC-1': { kind: 'rewrite', decisionId: 'DEC-1', from: 'MongoDB', to: 'PostgreSQL', summary: { before: 'Store payout ledger in MongoDB for flexible schemas', after: 'Store payout ledger in PostgreSQL for flexible schemas' }, description: [{}, {}], replacements: [], advice: 'Use PostgreSQL instead of MongoDB, as DEC-1 requires.' } },
 };
+let inbox = [
+  {
+    pageId: '4227074',
+    title: 'Payments Sync — 2026-10-27',
+    url: '#',
+    at: '2026-10-29T12:58:00.000Z',
+    items: [
+      { key: 'k1', statement: 'We agreed to sunset the legacy payout CSV export by Q1 2027 and point Finance at the SQL views instead.', title: 'Sunset the legacy payout CSV export', confidence: 'high', reason: '“we agreed”', ownerName: 'Dana Kim', heading: 'Finance tooling' },
+      { key: 'k2', statement: 'Going forward, ledger services will stay on PostgreSQL 16; no new document stores for payments.', title: 'Ledger services stay on PostgreSQL 16', confidence: 'high', reason: '“going forward”', duplicateOf: 'DEC-1' },
+    ],
+  },
+];
 let briefs = { 'PAY-1': { commentId: '10042', ids: ['DEC-1', 'DEC-5'], conflicts: ['DEC-1'], at: '2026-10-29T12:20:00.000Z' } };
 const issueCheck = () => {
   const c = checks.find((x) => x.issue.key === current);
@@ -181,7 +193,7 @@ export function invoke(name, p) {
   switch (name) {
     case 'getOverview': {
       const ds = withHealth();
-      return { decisions: ds, refs: refsFor(), checks, team: team(ds), settings: { reviewDays: 180 }, siteUrl: SITE, teamworkGraph: { connections: 1, lastSync: { at: '2026-10-29T12:24:30.000Z', accepted: 14, objects: 14 } } };
+      return { inboxCount: inbox.reduce((n, e) => n + e.items.length, 0), decisions: ds, refs: refsFor(), checks, team: team(ds), settings: { reviewDays: 180 }, siteUrl: SITE, teamworkGraph: { connections: 1, lastSync: { at: '2026-10-29T12:24:30.000Z', accepted: 14, objects: 14 } } };
     }
     case 'getDecision': {
       const d = withHealth().find((x) => x.id === p.id);
@@ -226,6 +238,11 @@ export function invoke(name, p) {
     }
     case 'getIssueCheck':
       return issueCheck();
+    case 'getInbox':
+      return inbox;
+    case 'inboxAction':
+      inbox = inbox.map((e) => ({ ...e, items: e.items.filter((i) => i.key !== p.key) })).filter((e) => e.items.length);
+      return p.op === 'accept' ? { recorded: [{ id: 'DEC-16' }] } : { ok: true };
     case 'getAgentBrief':
       return { markdown: BRIEF_MD.replace(/PAY-1/g, current), ids: ['DEC-1', 'DEC-5'] };
     case 'attachBrief':

@@ -100,6 +100,97 @@ function ConflictHeatmap({ decisions, checks, siteUrl, onOpen }) {
   );
 }
 
+/** Decisions found in meeting-notes prose, waiting for someone to accept, merge or dismiss them. */
+function Inbox({ decisions, onOpen, onChanged }) {
+  const [pages, setPages] = useState(null);
+  const load = () => invoke('getInbox').then(setPages);
+  useEffect(() => {
+    load();
+  }, []);
+  if (!pages) return <Spinner label="Loading the inbox" />;
+  if (!pages.length)
+    return (
+      <div className="card pad-lg">
+        <Empty title="Inbox zero" art="inbox">
+          When meeting notes say “we agreed…” or “we decided…” without a /decision item, the statement lands here when the page is published. Accept it, merge it into a decision you already have, or dismiss it.
+        </Empty>
+      </div>
+    );
+  const act = async (pageId, item, op, into) => {
+    const r = await invoke('inboxAction', { pageId, key: item.key, op, into });
+    if (r?.error) return flag('Could not update the inbox', r.error, 'error');
+    if (op === 'accept') flag(`Tracking ${r.recorded.map((d) => d.id).join(', ')}`, 'Jira work is being checked against it now.');
+    if (op === 'merge') flag(`Merged into ${into}`, 'Recorded as reaffirmed; its review clock restarts.');
+    await load();
+    onChanged?.();
+  };
+  return (
+    <div className="col gap-16">
+      {pages.map((p) => (
+        <div key={p.pageId} className="card pad-lg rise">
+          <div className="card-title">
+            <div>
+              <div className="row gap-6">
+                <Icon name="doc" size={16} style={{ color: 'var(--link)' }} />
+                <a className="h2" onClick={() => open(p.url)}>{p.title}</a>
+              </div>
+              <div className="small faint">{`${plural(p.items.length, 'possible decision')} found in the prose · ${new Date(p.at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`}</div>
+            </div>
+            <Icon name="inbox" size={18} className="faint" />
+          </div>
+          <div className="col gap-8">
+            {p.items.map((c) => {
+              const dup = c.duplicateOf ? decisions.find((d) => d.id === c.duplicateOf) : null;
+              const like = !dup && c.similar ? decisions.find((d) => d.id === c.similar.id) : null;
+              return (
+                <div key={c.key} className="card flat" style={{ padding: '12px 14px' }}>
+                  <div className="row spread top gap-12 wrap">
+                    <div className="col gap-6 grow" style={{ minWidth: 260 }}>
+                      <div style={{ color: 'var(--text)' }}>{c.statement}</div>
+                      <div className="row wrap gap-6">
+                        <span className={`pill ${c.confidence === 'high' ? 'aligned' : 'reviewed'}`}>{c.confidence}</span>
+                        <span className="tiny faint">{c.reason}</span>
+                        {c.ownerName ? <span className="tiny muted">· {c.ownerName}</span> : null}
+                        {c.heading ? <span className="tiny muted">· under “{c.heading}”</span> : null}
+                      </div>
+                      {dup || like ? (
+                        <div className="tiny" style={{ color: 'var(--purple)' }}>
+                          {dup ? 'Same as' : 'Looks like'} <a className="mono strong" onClick={() => onOpen((dup || like).id)}>{(dup || like).id}</a> “{(dup || like).title}”
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="btn-row">
+                      {dup ? (
+                        <AsyncButton size="sm" icon="layers" onClick={() => act(p.pageId, c, 'merge', dup.id)}>
+                          {`Merge into ${dup.id}`}
+                        </AsyncButton>
+                      ) : (
+                        <>
+                          {like ? (
+                            <AsyncButton size="sm" icon="layers" onClick={() => act(p.pageId, c, 'merge', like.id)}>
+                              {`Merge into ${like.id}`}
+                            </AsyncButton>
+                          ) : null}
+                          <AsyncButton size="sm" kind={like ? '' : 'primary'} icon="plus" onClick={() => act(p.pageId, c, 'accept')}>
+                            {like ? 'Track as new' : 'Accept'}
+                          </AsyncButton>
+                        </>
+                      )}
+                      <AsyncButton size="sm" kind="subtle" icon="x" onClick={() => act(p.pageId, c, 'dismiss')}>
+                        Dismiss
+                      </AsyncButton>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Coding agents: the brief Precedent keeps on work items, and the MCP tools. */
 function AgentSetup({ appId, settings }) {
   const [opts, setOpts] = useState({ autoBrief: settings?.autoBrief !== false, briefTarget: settings?.briefTarget || 'comment' });
@@ -407,6 +498,7 @@ export default function DecisionCenter() {
         tabs={[
           { id: 'overview', label: 'Overview', icon: 'pulse' },
           { id: 'decisions', label: 'Decisions', icon: 'list', count: decisions.length },
+          { id: 'inbox', label: 'Inbox', icon: 'inbox', count: data.inboxCount || undefined },
           { id: 'map', label: 'Map', icon: 'graph' },
           { id: 'setup', label: 'Setup & integrations', icon: 'settings' },
         ]}
@@ -421,6 +513,8 @@ export default function DecisionCenter() {
           ) : null}
           <Setup appId={appId} settings={data.settings} graph={data.teamworkGraph} createHints={data.createHints} onLoaded={load} />
         </>
+      ) : tab === 'inbox' ? (
+        <Inbox decisions={decisions} onOpen={setOpenId} onChanged={load} />
       ) : tab === 'overview' ? (
         <div className="col gap-16">
           <div className="grid two">

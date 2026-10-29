@@ -214,3 +214,10 @@ test('at most 15 candidates, high first', () => {
   assert.ok(found.slice(8).every((c) => c.confidence === 'medium'));
   assert.match(found[8].statement, /^Service 1 publishes/);
 });
+
+test('"we agreed to X and to Y" reads as an instruction', async () => {
+  const { findDecisionCandidates } = await import('../src/lib/extract.js');
+  const adf = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'We agreed to cap card-on-file retries at three attempts per day and to route every retry through Stripe Smart Retries.' }] }] };
+  const [c] = findDecisionCandidates(adf);
+  assert.equal(c.statement, 'Cap card-on-file retries at three attempts per day and route every retry through Stripe Smart Retries.');
+});

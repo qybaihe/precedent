@@ -4,6 +4,7 @@ import { checkIssue, recheck, enqueueRecheck, jobs } from './lib/checker.js';
 import { harvestConfluencePage, harvestJiraComment } from './lib/harvest.js';
 import { getSettings, deleteCheck, listDecisions, listChecks } from './lib/store.js';
 import { recentPageIds, siteUrl, decisionLogUrl } from './lib/products.js';
+import { refreshInbox } from './inbox.js';
 import { syncDecisionsToGraph } from './lib/graph.js';
 
 const CONTENT_FIELDS = new Set(['summary', 'description', 'labels', 'components', 'Component']);
@@ -46,7 +47,9 @@ export async function onConfluencePage(event) {
   const id = event.content?.id;
   if (!id) return;
   const r = await harvestConfluencePage(id);
-  console.log(`harvested page ${id}: +${r.created} new, ${r.updated} updated, ${r.archived} archived`);
+  // decisions written in prose ("we agreed to…") wait in the Decision Inbox
+  const inbox = await refreshInbox(id).catch((e) => console.warn(`inbox for page ${id}: ${e.message}`));
+  console.log(`harvested page ${id}: +${r.created} new, ${r.updated} updated, ${r.archived} archived${inbox ? `, ${inbox} in the inbox` : ''}`);
   if (r.created || r.archived || r.updated) await enqueueRecheck();
 }
 
@@ -77,6 +80,8 @@ export async function runJob(event) {
         // eslint-disable-next-line no-await-in-loop
         const r = await harvestConfluencePage(id);
         created += r.created;
+        // eslint-disable-next-line no-await-in-loop
+        await refreshInbox(id);
       } catch (e) {
         console.warn(`scan: page ${id} skipped: ${e.message}`);
       }

@@ -15,3 +15,4 @@ export {
 export { selftest } from './selftest.js';
 export { onConnectionChange } from './lib/graph.js';
 export { validateTransition } from './gate.js';
+export { hourlyTripwires } from './tripwires.js';

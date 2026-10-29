@@ -16,7 +16,7 @@ import {
   saveSettings,
 } from './lib/store.js';
 import { acknowledge, logException, supersedeDecision } from './actions.js';
-import { listProjects, listSpaces, userCanBrowse, userCanEdit, siteUrl, getIssue, updateIssue, addComment, getPage, addPageComment, decisionLogUrl, issueKeysMatching } from './lib/products.js';
+import { listProjects, listSpaces, userCanBrowse, userCanEdit, siteUrl, getIssue, updateIssue, addComment, getPage, addPageComment, decisionLogUrl, issueKeysMatching, countIssues } from './lib/products.js';
 import { createSampleData } from './sample.js';
 import { applyReplacementsToAdf, applyReplacementsToText, preferredAlternative } from './lib/fix.js';
 import { findDecisionCandidates } from './lib/extract.js';
@@ -25,9 +25,13 @@ import { dateFromTitle } from './lib/adf.js';
 import { pageUrl } from './lib/harvest.js';
 import { graphConnections, lastGraphSync } from './lib/graph.js';
 import { normalizeGuard } from './lib/guard.js';
+import { bm25, buildIndex } from './lib/check.js';
 import { buildBrief, briefMarkdown, stripBrief } from './lib/brief.js';
 import { enableCreateHints, createHintsStatus } from './gate.js';
 import { createHintFor, createFlagFor } from './lib/hint.js';
+import { normalizeTripwire } from './lib/tripwire.js';
+import { runTripwires } from './tripwires.js';
+import { pageCandidates, acceptFromInbox, listInbox, dismissFromInbox, mergeFromInbox, NOTES_PREFIX } from './inbox.js';
 
 const resolver = new Resolver();
 
@@ -65,7 +69,6 @@ const escapeHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
 // Decisions found in meeting-note prose get their own key prefix: harvesting archives anything under
 // `confluence:<page>:` that is no longer a /decision item, and these never were.
-const NOTES_PREFIX = (pageId) => `confluence-notes:${pageId}:`;
 async function pageDecisions(pageId) {
   if (!pageId) return [];
   const [items, notes] = await Promise.all([decisionsFromSourcePrefix(`confluence:${pageId}:`), decisionsFromSourcePrefix(NOTES_PREFIX(pageId))]);
@@ -205,7 +208,7 @@ resolver.define('listDecisions', async () => {
 });
 
 resolver.define('getOverview', async () => {
-  const [decisions, checks, settings, base, connections, graphSync, createHints] = await Promise.all([
+  const [decisions, checks, settings, base, connections, graphSync, createHints, inbox] = await Promise.all([
     listDecisions(),
     listChecks(),
     getSettings(),
@@ -213,6 +216,7 @@ resolver.define('getOverview', async () => {
     graphConnections(),
     lastGraphSync(),
     createHintsStatus(),
+    listInbox(),
   ]);
   const refs = impactRefs(checks);
   const team = teamHealth(decisions, refs);
@@ -226,6 +230,7 @@ resolver.define('getOverview', async () => {
     siteUrl: base,
     teamworkGraph: { connections: connections.length, lastSync: graphSync },
     createHints,
+    inboxCount: inbox.reduce((n, e) => n + e.items.length, 0),
   };
 });
 
@@ -292,17 +297,37 @@ resolver.define('updateAssumptions', async ({ payload, context }) => {
     if (payload.op === 'remove') {
       list.splice(i, 1);
       history.push(event(`Assumption removed: “${a.text}”`));
+    } else if (payload.op === 'tripwire') {
+      const { tripwire, error } = normalizeTripwire(payload.tripwire);
+      if (error) return { error };
+      if (tripwire?.kind === 'jql') {
+        try {
+          await countIssues(tripwire.jql);
+        } catch (e) {
+          return { error: `The JQL is not valid: ${e.message.replace(/^.*?: /, '')}` };
+        }
+      }
+      list[i] = { ...a, tripwire: tripwire || undefined, lastCheck: undefined };
+      history.push(event(tripwire ? `Tripwire set on “${a.text}”` : `Tripwire removed from “${a.text}”`));
     } else if (payload.op === 'set' && ['holds', 'changed'].includes(payload.status)) {
       const note = String(payload.note || '').trim().slice(0, 200);
       list[i] = { ...a, status: payload.status, changedAt: now, note: payload.status === 'changed' ? note : '' };
+      if (payload.status === 'holds' && a.lastCheck?.tripped) list[i].snoozed = true;
       history.push(event(payload.status === 'changed' ? `Assumption no longer holds: “${a.text}”${note ? ` — ${note}` : ''}` : `Assumption confirmed: “${a.text}”`));
     }
   }
-  const saved = await saveDecision({ ...d, assumptions: list, history });
+  let saved = await saveDecision({ ...d, assumptions: list, history });
+  // measure a new tripwire right away, so the drawer shows its first reading
+  if (payload.op === 'tripwire' && list.some((x) => x.tripwire)) {
+    await runTripwires({ only: d.id });
+    saved = await getDecision(d.id);
+  }
   await jobs.push({ body: { type: 'graph-sync' } }).catch(() => {});
   const checks = await listChecks();
   return { ...saved, health: decisionHealth(saved, impactRefs(checks)[saved.id]) };
 });
+
+resolver.define('runTripwires', async ({ payload }) => runTripwires({ only: payload?.id }));
 
 resolver.define('supersede', async ({ payload, context }) => {
   const r = await supersedeDecision(
@@ -428,17 +453,6 @@ resolver.define('getPageDecisions', async ({ context }) => {
   }));
 });
 
-async function pageCandidates(pageId) {
-  const [page, existing] = await Promise.all([getPage(pageId), listDecisions()]);
-  const adf = JSON.parse(page.body?.atlas_doc_format?.value || '{"content":[]}');
-  const tracked = new Set(existing.filter((d) => d.sourceKey?.startsWith(NOTES_PREFIX(pageId))).map((d) => d.sourceKey));
-  const candidates = findDecisionCandidates(adf, { existing: existing.filter((d) => d.status === 'active') }).map((c) => {
-    if (c.duplicateOf || !tracked.has(`${NOTES_PREFIX(pageId)}${c.key}`)) return c;
-    return { ...c, duplicateOf: existing.find((d) => d.sourceKey === `${NOTES_PREFIX(pageId)}${c.key}`)?.id || 'tracked' };
-  });
-  return { page, candidates };
-}
-
 resolver.define('findPageDecisions', async ({ context }) => {
   const pageId = context.extension?.content?.id;
   if (!pageId) return { candidates: [] };
@@ -450,26 +464,36 @@ resolver.define('recordPageDecisions', async ({ payload, context }) => {
   const pageId = context.extension?.content?.id;
   if (!pageId) return { recorded: [] };
   // only statements Precedent itself found on this page can be recorded from here
-  const { page, candidates } = await pageCandidates(pageId);
-  const wanted = new Set((payload.items || []).map((i) => i.key));
-  const base = await siteUrl();
-  const recorded = [];
-  for (const c of candidates.filter((x) => wanted.has(x.key) && !x.duplicateOf)) {
-    // eslint-disable-next-line no-await-in-loop
-    const d = await createDecision({
-      title: c.title,
-      statement: c.statement,
-      owner: c.ownerName ? { name: c.ownerName, accountId: c.ownerAccountId || undefined } : null,
-      decidedAt: dateFromTitle(page.title) || page.createdAt,
-      createdBy: context.accountId,
-      sourceKey: `${NOTES_PREFIX(pageId)}${c.key}`,
-      source: { type: 'confluence', label: 'Confluence', kind: 'Found in meeting notes', title: page.title, url: pageUrl(page, base), pageId: String(page.id), heading: c.heading || undefined },
-      history: [{ at: new Date().toISOString(), what: `Found in meeting notes (${c.reason}) and confirmed`, by: context.accountId }],
-    });
-    recorded.push(d);
-  }
-  if (recorded.length) await enqueueRecheck();
+  const recorded = await acceptFromInbox(pageId, (payload.items || []).map((i) => i.key), context.accountId);
   return { recorded };
+});
+
+// ---------- Decision Inbox (decisions found in meeting notes) ----------
+
+resolver.define('getInbox', async () => {
+  const [pages, decisions] = await Promise.all([listInbox(), listDecisions()]);
+  const index = buildIndex(decisions.filter((d) => d.status === 'active'));
+  // the closest existing decision, so a restated decision can be merged instead of duplicated
+  return pages.map((p) => ({
+    ...p,
+    items: p.items.map((c) => {
+      if (c.duplicateOf) return c;
+      const top = bm25(index, c.statement)[0];
+      return top && top.overlap.length >= 4 ? { ...c, similar: { id: top.decision.id, title: top.decision.title } } : c;
+    }),
+  }));
+});
+
+resolver.define('inboxAction', async ({ payload, context }) => {
+  const { pageId, key, op, into } = payload || {};
+  if (!pageId || !key) return { error: 'Missing page or item' };
+  if (op === 'accept') return { recorded: await acceptFromInbox(pageId, [key], context.accountId) };
+  if (op === 'merge') return mergeFromInbox(pageId, key, into, context.accountId);
+  if (op === 'dismiss') {
+    await dismissFromInbox(pageId, key);
+    return { dismissed: key };
+  }
+  return { error: `Unknown action ${op}` };
 });
 
 export const handler = resolver.getDefinitions();

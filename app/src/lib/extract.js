@@ -76,7 +76,8 @@ function cleanStatement(text) {
     if (m[1] && (words(m[1]).length > 10 || SCOPING_LEAD.test(m[1].trim()))) continue;
     const rest = s.slice(m[0].length);
     if (words(rest).length < 3) continue;
-    s = replacement(m[2]) + rest;
+    // "we agreed to cap X and to route Y" -> "Cap X and route Y"
+    s = replacement(m[2]) + (m[2] === 'to' ? rest.replace(/\b(and|or)\s+to\s+(?=[a-z])/g, '$1 ') : rest);
     break;
   }
   s = s.replace(/,?\s+(?:going forward|from now on)(?=[.!]?$)/i, '');

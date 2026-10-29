@@ -14,6 +14,7 @@ import {
   Spinner,
   StatusPill,
   formatDate,
+  ago,
   sameText,
   plural,
   Banner,
@@ -101,9 +102,55 @@ function suggestedAssumptions(d) {
     .slice(0, 3);
 }
 
+const TRIP_WORDS = { '>': 'more than', '>=': 'at least', '<': 'fewer than', '<=': 'at most' };
+function tripwireText(tw) {
+  if (tw.kind === 'jql') return `${TRIP_WORDS[tw.op] || 'more than'} ${tw.threshold} match ${tw.jql}`;
+  if (tw.kind === 'date') return `after ${formatDate(`${tw.date}T00:00:00.000Z`)}`;
+  return `once ${tw.issueKey} is done`;
+}
+
+/** A machine-checkable condition for one assumption, measured every hour. */
+function TripwireForm({ onCancel, onSave }) {
+  const [tw, setTw] = useState({ kind: 'jql', op: '>', threshold: 5, jql: '' });
+  const set = (k) => (e) => setTw({ ...tw, [k]: e.target.value });
+  return (
+    <div className="col gap-8 mt-8 tripwire-form">
+      <div className="row gap-6 wrap">
+        <select className="select" style={{ height: 30, width: 'auto' }} value={tw.kind} onChange={set('kind')}>
+          <option value="jql">JQL count</option>
+          <option value="date">Date</option>
+          <option value="issue">Work item done</option>
+        </select>
+        {tw.kind === 'jql' ? (
+          <>
+            <select className="select" style={{ height: 30, width: 'auto' }} value={tw.op} onChange={set('op')}>
+              {Object.entries(TRIP_WORDS).map(([op, w]) => (
+                <option key={op} value={op}>{w}</option>
+              ))}
+            </select>
+            <input className="input" style={{ height: 30, width: 64 }} type="number" min="0" value={tw.threshold} onChange={set('threshold')} />
+          </>
+        ) : null}
+        {tw.kind === 'date' ? <input className="input" style={{ height: 30, width: 'auto' }} type="date" value={tw.date || ''} onChange={set('date')} /> : null}
+        {tw.kind === 'issue' ? <input className="input mono" style={{ height: 30, width: 120 }} placeholder="PAY-42" value={tw.issueKey || ''} onChange={set('issueKey')} /> : null}
+      </div>
+      {tw.kind === 'jql' ? <input className="input mono" style={{ height: 30 }} placeholder="project = PAY AND labels = perf AND created >= -30d" value={tw.jql} onChange={set('jql')} /> : null}
+      <div className="row gap-6">
+        <AsyncButton size="xs" kind="primary" icon="pulse" onClick={() => onSave(tw)}>
+          Set tripwire
+        </AsyncButton>
+        <Button size="xs" kind="subtle" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Assumptions({ decision: d, onSaved }) {
   const [text, setText] = useState('');
   const [changing, setChanging] = useState(null);
+  const [wiring, setWiring] = useState(null);
   const [note, setNote] = useState('');
   const call = async (payload) => onSaved(await invoke('updateAssumptions', { id: d.id, ...payload }));
   const list = d.assumptions || [];
@@ -116,6 +163,27 @@ function Assumptions({ decision: d, onSaved }) {
           <div className="col gap-4">
             <div className="small" style={{ color: 'var(--text)' }}>{a.text}</div>
             {a.status === 'changed' ? <div className="tiny" style={{ color: 'var(--red)' }}>No longer holds{a.note ? `: ${a.note}` : ''} · {formatDate(a.changedAt)}</div> : <div className="tiny faint">Holds{a.changedAt ? ` · confirmed ${formatDate(a.changedAt)}` : ''}</div>}
+            {a.tripwire ? (
+              <div className={`tripwire ${a.lastCheck?.tripped ? 'tripped' : ''}`}>
+                <Icon name="pulse" size={12} />
+                <span>
+                  Tripwire: {tripwireText(a.tripwire)}
+                  {a.lastCheck?.error ? ` · check failed: ${a.lastCheck.error}` : a.lastCheck ? ` · now ${a.lastCheck.value ?? '?'} (${ago(a.lastCheck.at)})` : ''}
+                  {a.snoozed ? ' · snoozed until it clears' : ''}
+                </span>
+                <button className="link-btn" title="Measure it now" onClick={async () => onSaved(await invoke('runTripwires', { id: d.id }))}>check now</button>
+                <button className="link-btn" title="Remove tripwire" onClick={() => call({ op: 'tripwire', assumptionId: a.id, tripwire: null })}>remove</button>
+              </div>
+            ) : null}
+            {wiring === a.id ? (
+              <TripwireForm
+                onCancel={() => setWiring(null)}
+                onSave={async (tw) => {
+                  await call({ op: 'tripwire', assumptionId: a.id, tripwire: tw });
+                  setWiring(null);
+                }}
+              />
+            ) : null}
             {changing === a.id ? (
               <div className="row gap-6 mt-8">
                 <input className="input" style={{ height: 30 }} placeholder="What changed? (optional)" value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
@@ -132,6 +200,7 @@ function Assumptions({ decision: d, onSaved }) {
             ) : changing !== a.id ? (
               <Button size="xs" icon="alert" onClick={() => setChanging(a.id)}>It changed</Button>
             ) : null}
+            {!a.tripwire && a.status !== 'changed' && wiring !== a.id ? <Button size="xs" kind="subtle" icon="pulse" title="Check it automatically" onClick={() => setWiring(a.id)}>Tripwire</Button> : null}
             <AsyncButton size="xs" kind="subtle" icon="x" title="Stop tracking" onClick={() => call({ op: 'remove', assumptionId: a.id })} />
           </div>
         </div>

@@ -108,6 +108,9 @@ modules:
     - key: daily-sweep-schedule
       function: daily-sweep
       interval: day
+    - key: tripwire-schedule
+      function: tripwire-check
+      interval: hour
   consumer:
     - key: precedent-jobs-consumer
       queue: precedent-jobs
@@ -426,6 +429,9 @@ modules:
       handler: index.onConfluencePage
     - key: daily-sweep
       handler: index.dailySweep
+    - key: tripwire-check
+      handler: index.hourlyTripwires
+      timeoutSeconds: 300
     - key: run-job
       handler: index.runJob
       timeoutSeconds: 600

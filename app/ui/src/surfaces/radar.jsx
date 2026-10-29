@@ -109,6 +109,10 @@ export default function Radar() {
     for (const x of c.related) (impact[x.decision.id] ||= { conflicts: 0, aligned: 0, related: 0 }).related += 1;
   }
 
+  // tripped tripwires first, then other premises that changed, then overdue reviews
+  const rank = (d) => (d.health.outdated.reasons.some((r) => /Tripwire/.test(r)) ? 0 : d.health.outdated.reasons.some((r) => /^Assumption/.test(r)) ? 1 : 2);
+  const review = decisions.filter((d) => d.health?.outdated?.possibly && rank(d) < 2).sort((a, b) => rank(a) - rank(b));
+
   return (
     <div className="page">
       <section className="hero rise">
@@ -156,6 +160,25 @@ export default function Radar() {
             Every work item in {projectKey} is being re-checked in the background.{' '}
             <a onClick={load}>Refresh now</a>
           </Banner>
+        </div>
+      ) : null}
+
+      {review.length ? (
+        <div className="needs-review mt-16 rise">
+          <div className="row gap-8">
+            <span className="pulse-dot" />
+            <span className="strong">{`${plural(review.length, 'decision')} ${review.length === 1 ? 'needs' : 'need'} review`}</span>
+            <span className="small" style={{ opacity: 0.85 }}>The world changed under {review.length === 1 ? 'it' : 'them'}: work is still being checked against {review.length === 1 ? 'it' : 'them'}.</span>
+          </div>
+          <div className="col gap-6 mt-8">
+            {review.map((d) => (
+              <button key={d.id} className="review-row" onClick={() => setOpenId(d.id)}>
+                <span className="mono strong">{d.id}</span>
+                <span className="strong clamp-1" style={{ flex: '0 1 auto' }}>{d.title}</span>
+                <span className="clamp-1 small" style={{ opacity: 0.9 }}>{d.health.outdated.reasons[0]}</span>
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 
