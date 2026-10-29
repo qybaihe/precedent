@@ -169,9 +169,20 @@ export async function deleteCheck(issueKey) {
   await kvs.delete(`${PREFIX.check}${issueKey}`);
 }
 
+// ---------- agent briefs (the Precedent brief comment on a work item) ----------
+
+export async function getBriefRecord(issueKey) {
+  return (await kvs.get(`brief:${issueKey}`)) || null;
+}
+
+export async function saveBriefRecord(issueKey, record) {
+  if (record) await kvs.set(`brief:${issueKey}`, record);
+  else await kvs.delete(`brief:${issueKey}`);
+}
+
 // ---------- settings ----------
 
-const DEFAULT_SETTINGS = { commentOnConflict: false, harvestJiraComments: true, harvestConfluence: true };
+const DEFAULT_SETTINGS = { commentOnConflict: false, harvestJiraComments: true, harvestConfluence: true, autoBrief: true };
 
 export async function getSettings() {
   return { ...DEFAULT_SETTINGS, ...((await kvs.get('meta:settings')) || {}) };
@@ -184,7 +195,7 @@ export async function saveSettings(patch) {
 }
 
 export async function resetAll() {
-  for (const prefix of [PREFIX.decision, PREFIX.source, PREFIX.check]) {
+  for (const prefix of [PREFIX.decision, PREFIX.source, PREFIX.check, 'brief:']) {
     let cursor;
     do {
       let q = kvs.query().where('key', WhereConditions.beginsWith(prefix)).limit(100);

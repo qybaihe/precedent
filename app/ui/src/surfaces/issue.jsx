@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { invoke, askRovo, rovoEnabled, getContext, flag } from '../api.js';
 import { Icon } from '../components/icons.jsx';
-import { AsyncButton, Banner, Button, DecId, DecisionMeta, Field, Pill, Spinner, plural, sameText } from '../components/primitives.jsx';
+import { AsyncButton, Banner, Button, DecId, DecisionMeta, Field, Pill, Spinner, ago, plural, sameText } from '../components/primitives.jsx';
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -219,6 +219,61 @@ function RecordForm({ projectKey, onCancel, onSaved }) {
   );
 }
 
+/**
+ * The brief for coding agents: one Precedent comment on the work item, kept up to date. Jira's
+ * "Open in coding tool" hands the work item's comments to Claude Code, Cursor or VS Code, so the
+ * agent starts out knowing what was decided.
+ */
+function AgentBrief({ brief, onAttach }) {
+  const [text, setText] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const show = async () => {
+    if (text) return setText(null);
+    const r = await invoke('getAgentBrief');
+    setText(r?.markdown || '');
+  };
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false); // the iframe may not allow clipboard access: the text is selectable below
+    }
+  };
+  return (
+    <div className="brief rise">
+      <div className="row gap-12 top">
+        <div className="brief-icon">
+          <Icon name="code" size={17} stroke={2.4} />
+        </div>
+        <div className="grow col gap-4" style={{ minWidth: 0 }}>
+          <div className="strong">Brief for coding agents</div>
+          <div className="small muted">
+            {brief
+              ? `${brief.target === 'description' ? 'Kept at the end of the description' : 'Attached as a comment'} (${brief.ids.join(', ')}), updated ${ago(brief.at)}. “Open in coding tool” hands it to Claude Code, Cursor or VS Code with this work item.`
+              : 'Attach the decisions an AI coding agent must respect, so “Open in coding tool” hands them over with this work item.'}
+          </div>
+        </div>
+      </div>
+      <div className="btn-row mt-8">
+        <AsyncButton size="xs" kind={brief ? 'subtle' : 'primary'} icon={brief ? 'refresh' : 'plus'} onClick={onAttach}>
+          {brief ? 'Refresh' : 'Attach agent brief'}
+        </AsyncButton>
+        <AsyncButton size="xs" kind="subtle" icon="doc" onClick={show}>
+          {text ? 'Hide brief' : 'View brief'}
+        </AsyncButton>
+        {text ? (
+          <Button size="xs" kind="subtle" icon={copied ? 'check' : 'copy'} onClick={copy}>
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+        ) : null}
+      </div>
+      {text ? <pre className="brief-text mt-8">{text}</pre> : null}
+    </div>
+  );
+}
+
 export default function IssuePanel() {
   const [ctx, setCtx] = useState(null);
   const [check, setCheck] = useState(null);
@@ -309,6 +364,20 @@ export default function IssuePanel() {
             <MiniDecision key={r.decision.id} decision={r.decision} note={sameText(r.decision.statement, r.decision.title) ? null : r.decision.statement} tone="related" />
           ))}
         </div>
+      ) : null}
+
+      {open.length || check.aligned.length || check.related.length || check.governing?.length || check.brief ? (
+        <AgentBrief
+          brief={check.brief}
+          onAttach={async () => {
+            const r = await invoke('attachBrief');
+            if (r?.error) setNotice({ tone: 'error', title: 'Could not attach the brief', text: r.error });
+            else {
+              setCheck(r);
+              flag('Agent brief attached', `Comment on ${issueKey} lists ${plural(r.brief?.ids?.length || 0, 'binding decision')}.`);
+            }
+          }}
+        />
       ) : null}
 
       {recording ? (

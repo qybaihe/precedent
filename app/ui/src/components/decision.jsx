@@ -180,6 +180,48 @@ function SupersedeForm({ decision: d, onCancel, onDone }) {
   );
 }
 
+/** The structured guard: what agents, the workflow gate and the create-time warning enforce. */
+function GuardView({ guard: g }) {
+  if (!g) return <div className="small faint">No guard yet. Add file paths, denied packages or a JQL scope so coding agents and Jira enforce this decision exactly.</div>;
+  const rows = [
+    ['Governs files', g.paths, ''],
+    ['Denied packages', g.packages?.deny, 'deny'],
+    ['Use instead', g.packages?.allow, 'allow'],
+    ['Also flags', g.keywords, 'deny'],
+  ].filter(([, list]) => list?.length);
+  return (
+    <div className="col gap-8">
+      {rows.map(([label, list, tone]) => (
+        <div key={label} className="row wrap gap-6 top">
+          <span className="tiny strong muted" style={{ width: 108, flex: 'none', paddingTop: 3 }}>{label.toUpperCase()}</span>
+          <span className="row wrap gap-6 grow">
+            {list.map((x) => (
+              <span key={x} className={`guard-chip ${tone}`}>
+                {tone === 'deny' ? <Icon name="ban" size={11} /> : tone === 'allow' ? <Icon name="check" size={11} /> : null}
+                {x}
+              </span>
+            ))}
+          </span>
+        </div>
+      ))}
+      {g.jql ? (
+        <div className="row wrap gap-6 top">
+          <span className="tiny strong muted" style={{ width: 108, flex: 'none', paddingTop: 3 }}>WORK ITEMS</span>
+          <code className="guard-chip">{g.jql}</code>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const guardForm = (g) => ({
+  gPaths: (g?.paths || []).join(', '),
+  gDeny: (g?.packages?.deny || []).join(', '),
+  gAllow: (g?.packages?.allow || []).join(', '),
+  gKeywords: (g?.keywords || []).join(', '),
+  gJql: g?.jql || '',
+});
+
 export function DecisionDrawer({ id: initialId, onClose, onChanged, rovoOn }) {
   const [id, setId] = useState(initialId);
   const [data, setData] = useState(null);
@@ -201,6 +243,7 @@ export function DecisionDrawer({ id: initialId, onClose, onChanged, rovoOn }) {
         tags: (r.decision.tags || []).join(', '),
         ownerName: r.decision.owner?.name || '',
         reviewBy: (r.decision.health?.reviewBy || '').slice(0, 10),
+        ...guardForm(r.decision.guard),
       });
     }
   };
@@ -341,6 +384,36 @@ export function DecisionDrawer({ id: initialId, onClose, onChanged, rovoOn }) {
               </div>
               <div className="section">
                 <div className="eyebrow">
+                  <Icon name="lock" size={13} /> Guard <span className="faint" style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>— enforced for coding agents, the Done gate and new work items</span>
+                </div>
+                {editing ? (
+                  <div className="col gap-16">
+                    <div className="grid two">
+                      <Field label="Governs files" help="Globs, e.g. services/payments/**">
+                        <input className="input mono" value={form.gPaths} onChange={set('gPaths')} placeholder="services/payments/**, db/ledger" />
+                      </Field>
+                      <Field label="Work items (JQL)" help="Only work items matching this are governed.">
+                        <input className="input mono" value={form.gJql} onChange={set('gJql')} placeholder="project = PAY" />
+                      </Field>
+                    </div>
+                    <div className="grid two">
+                      <Field label="Denied packages">
+                        <input className="input mono" value={form.gDeny} onChange={set('gDeny')} placeholder="mongodb, mongoose" />
+                      </Field>
+                      <Field label="Use instead">
+                        <input className="input mono" value={form.gAllow} onChange={set('gAllow')} placeholder="pg, prisma" />
+                      </Field>
+                    </div>
+                    <Field label="Also flag these phrases" help="Extra words that contradict the decision in work items and plans.">
+                      <input className="input" value={form.gKeywords} onChange={set('gKeywords')} placeholder="DocumentDB, Cosmos DB" />
+                    </Field>
+                  </div>
+                ) : (
+                  <GuardView guard={d.guard} />
+                )}
+              </div>
+              <div className="section">
+                <div className="eyebrow">
                   <Icon name="jira" size={13} /> Work items touching this decision <Pill>{data.workItems.length}</Pill>
                 </div>
                 {data.workItems.length ? (
@@ -400,7 +473,11 @@ export function DecisionDrawer({ id: initialId, onClose, onChanged, rovoOn }) {
                     kind="primary"
                     onClick={async () => {
                       const unchanged = form.reviewBy === (d.health?.reviewBy || '').slice(0, 10);
-                      await invoke('updateDecision', { id: d.id, patch: { ...form, reviewBy: unchanged ? undefined : form.reviewBy } });
+                      const { gPaths, gDeny, gAllow, gKeywords, gJql, ...fields } = form;
+                      const guardChanged = JSON.stringify(guardForm(d.guard)) !== JSON.stringify({ gPaths, gDeny, gAllow, gKeywords, gJql });
+                      const guard = { paths: gPaths, packages: { deny: gDeny, allow: gAllow }, keywords: gKeywords, jql: gJql };
+                      const r = await invoke('updateDecision', { id: d.id, patch: { ...fields, reviewBy: unchanged ? undefined : form.reviewBy, guard: guardChanged ? guard : undefined } });
+                      if (r?.error) return setNote({ tone: 'error', title: 'Could not save', text: r.error });
                       setEditing(false);
                       await load();
                       onChanged?.();

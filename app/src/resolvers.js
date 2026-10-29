@@ -16,7 +16,7 @@ import {
   saveSettings,
 } from './lib/store.js';
 import { acknowledge, logException, supersedeDecision } from './actions.js';
-import { listProjects, listSpaces, userCanBrowse, userCanEdit, siteUrl, getIssue, updateIssue, addComment, getPage, addPageComment } from './lib/products.js';
+import { listProjects, listSpaces, userCanBrowse, userCanEdit, siteUrl, getIssue, updateIssue, addComment, getPage, addPageComment, decisionLogUrl, issueKeysMatching } from './lib/products.js';
 import { createSampleData } from './sample.js';
 import { applyReplacementsToAdf, applyReplacementsToText, preferredAlternative } from './lib/fix.js';
 import { findDecisionCandidates } from './lib/extract.js';
@@ -24,6 +24,10 @@ import { decisionHealth, teamHealth, REVIEW_DAYS } from './lib/health.js';
 import { dateFromTitle } from './lib/adf.js';
 import { pageUrl } from './lib/harvest.js';
 import { graphConnections, lastGraphSync } from './lib/graph.js';
+import { normalizeGuard } from './lib/guard.js';
+import { buildBrief, briefMarkdown, stripBrief } from './lib/brief.js';
+import { enableCreateHints, createHintsStatus } from './gate.js';
+import { createHintFor, createFlagFor } from './lib/hint.js';
 
 const resolver = new Resolver();
 
@@ -77,6 +81,42 @@ resolver.define('getIssueCheck', async ({ context }) => {
   return checkIssue(key);
 });
 
+/** The agent brief for this work item as markdown (what the comment says, for copy/paste). */
+resolver.define('getAgentBrief', async ({ context }) => {
+  const key = issueKeyFrom(context);
+  if (!key) return { error: 'No work item in context' };
+  if (!(await userCanBrowse(key))) return { error: 'You do not have access to this work item' };
+  const [result, decisions, base] = await Promise.all([checkIssue(key), listDecisions(), siteUrl()]);
+  const b = buildBrief({ issueKey: key, result, decisions, logUrl: decisionLogUrl(base) });
+  return { markdown: briefMarkdown(b), ids: b.ids };
+});
+
+/** Post (or refresh) the Precedent brief comment, even when automatic briefs are off. */
+resolver.define('attachBrief', async ({ context }) => {
+  const key = issueKeyFrom(context);
+  if (!key) return { error: 'No work item in context' };
+  if (!(await userCanBrowse(key))) return { error: 'You do not have access to this work item' };
+  const r = await checkIssue(key, { forceBrief: true });
+  if (!r.brief) return { error: 'No recorded decision applies to this work item, so there is nothing to brief.' };
+  return r;
+});
+
+/** Create dialog: the "Already decided" hint for the summary being typed. */
+resolver.define('createHint', async ({ payload, context }) => {
+  const summary = String(payload.summary || '').slice(0, 500);
+  const projectKey = context.extension?.project?.key || payload.projectKey;
+  const hint = createHintFor(summary, await listDecisions(), projectKey);
+  return { hint, flag: createFlagFor(hint) };
+});
+
+resolver.define('enableCreateHints', async () => {
+  try {
+    return await enableCreateHints();
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
 resolver.define('applyFix', async ({ payload, context }) => {
   const key = issueKeyFrom(context);
   if (!key) return { error: 'No work item in context' };
@@ -90,8 +130,10 @@ resolver.define('applyFix', async ({ payload, context }) => {
   const fields = {};
   const summary = applyReplacementsToText(issue.fields.summary || '', fix.replacements);
   if (summary !== issue.fields.summary) fields.summary = summary;
-  if (issue.fields.description) {
-    const r = applyReplacementsToAdf(issue.fields.description, fix.replacements);
+  const { adf: ownText, had: hadBrief } = stripBrief(issue.fields.description);
+  if (ownText) {
+    // rewrite the team's text only; the brief block is rebuilt from the new check below
+    const r = applyReplacementsToAdf(ownText, fix.replacements);
     if (r.changed) fields.description = r.adf;
   }
   if (!Object.keys(fields).length) return { error: 'Nothing to change.' };
@@ -111,7 +153,7 @@ resolver.define('applyFix', async ({ payload, context }) => {
       { type: 'paragraph', content: [{ type: 'text', text: 'Requested by ' }, mention({ accountId: context.accountId }), { type: 'text', text: '.' }] },
     ],
   });
-  const after = await checkIssue(key);
+  const after = await checkIssue(key, { forceBrief: hadBrief && Boolean(fields.description) });
   return { check: after, applied: { from: fix.from, to: fix.to, summary: fields.summary || null } };
 });
 
@@ -163,13 +205,14 @@ resolver.define('listDecisions', async () => {
 });
 
 resolver.define('getOverview', async () => {
-  const [decisions, checks, settings, base, connections, graphSync] = await Promise.all([
+  const [decisions, checks, settings, base, connections, graphSync, createHints] = await Promise.all([
     listDecisions(),
     listChecks(),
     getSettings(),
     siteUrl().catch(() => ''),
     graphConnections(),
     lastGraphSync(),
+    createHintsStatus(),
   ]);
   const refs = impactRefs(checks);
   const team = teamHealth(decisions, refs);
@@ -182,6 +225,7 @@ resolver.define('getOverview', async () => {
     settings: { ...settings, reviewDays: REVIEW_DAYS },
     siteUrl: base,
     teamworkGraph: { connections: connections.length, lastSync: graphSync },
+    createHints,
   };
 });
 
@@ -304,6 +348,18 @@ resolver.define('updateDecision', async ({ payload, context }) => {
     const at = patch.reviewBy ? new Date(patch.reviewBy) : null;
     next.reviewBy = at && !Number.isNaN(at.getTime()) ? at.toISOString() : undefined;
     next.history = [...(next.history || []), { at: now, kind: 'review', what: next.reviewBy ? `Revisit date set to ${next.reviewBy.slice(0, 10)}` : 'Revisit date cleared', by: context.accountId }];
+  }
+  if (patch.guard !== undefined) {
+    const guard = normalizeGuard(patch.guard);
+    if (guard?.jql) {
+      try {
+        await issueKeysMatching(`(${guard.jql})`, 1);
+      } catch (e) {
+        return { error: `The guard JQL is not valid: ${e.message.replace(/^.*?: /, '')}` };
+      }
+    }
+    next.guard = guard || undefined;
+    next.history = [...(next.history || []), { at: now, kind: 'guard', what: guard ? 'Guard updated' : 'Guard removed', by: context.accountId }];
   }
   if (patch.status && patch.status !== d.status) {
     next.status = patch.status;

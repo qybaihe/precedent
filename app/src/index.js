@@ -9,6 +9,9 @@ export {
   supersedeDecision,
   logException,
   listConflicts,
+  preflight,
+  guardCheck,
 } from './actions.js';
 export { selftest } from './selftest.js';
 export { onConnectionChange } from './lib/graph.js';
+export { validateTransition } from './gate.js';

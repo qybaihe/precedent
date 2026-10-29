@@ -25,6 +25,7 @@ let decisions = [
     statement: 'Keep all transactional payment data in PostgreSQL. Do not introduce MongoDB or other document stores for payments.',
     rationale: 'Reconciliation needs multi-row ACID transactions and Finance runs SQL audits against the ledger every night. MongoDB would also add a second on-call runbook for a team of five.',
     tags: ['payments', 'database'],
+    guard: { paths: ['services/payments/**', 'db/ledger/**'], packages: { deny: ['mongodb', 'mongoose', '@aws-sdk/client-dynamodb'], allow: ['pg', 'prisma'] }, keywords: ['DocumentDB'], jql: 'project = PAY' },
     assumptions: [{ id: 'a1', text: 'Reconciliation needs multi-row ACID transactions', status: 'holds', addedAt: '2026-10-20T09:00:00.000Z' }],
     history: [{ at: '2026-10-20T09:00:00.000Z', kind: 'assumption', what: 'Assumption tracked: “Reconciliation needs multi-row ACID transactions”' }],
   }),
@@ -144,10 +145,24 @@ const fixes = {
   'PAY-9': { 'DEC-3': { kind: 'rewrite', decisionId: 'DEC-3', from: 'Adyen', to: 'Stripe', summary: { before: 'Integrate Adyen for EU card payments', after: 'Integrate Stripe for EU card payments' }, description: [], replacements: [{ find: 'Adyen', replace: 'Stripe' }], advice: 'Use Stripe instead of Adyen, as DEC-3 requires.' } },
   'PAY-1': { 'DEC-1': { kind: 'rewrite', decisionId: 'DEC-1', from: 'MongoDB', to: 'PostgreSQL', summary: { before: 'Store payout ledger in MongoDB for flexible schemas', after: 'Store payout ledger in PostgreSQL for flexible schemas' }, description: [{}, {}], replacements: [], advice: 'Use PostgreSQL instead of MongoDB, as DEC-1 requires.' } },
 };
+let briefs = { 'PAY-1': { commentId: '10042', ids: ['DEC-1', 'DEC-5'], conflicts: ['DEC-1'], at: '2026-10-29T12:20:00.000Z' } };
 const issueCheck = () => {
   const c = checks.find((x) => x.issue.key === current);
-  return { ...c, fixes: fixes[current] || {} };
+  return { ...c, fixes: fixes[current] || {}, brief: briefs[current] || null };
 };
+const BRIEF_MD = `## 🧭 Precedent brief for PAY-1
+2 team decisions apply to this work, and it currently contradicts DEC-1.
+
+1. **DEC-1 · Keep all transactional payment data in PostgreSQL** (Priya Shah, 2026-03-12)
+   - ⛔ CONFLICT: this work mentions “MongoDB”. Compliant alternative: Use PostgreSQL instead of MongoDB, as DEC-1 requires.
+   - Do: \`pg\`, \`prisma\`
+   - Don't: MongoDB, document stores, DocumentDB, \`mongodb\`, \`mongoose\`
+   - Governs: \`services/payments/**\`, \`db/ledger/**\`
+   - Why: Reconciliation needs multi-row ACID transactions and Finance runs SQL audits against the ledger every night.
+
+**Rules for coding agents**
+- Treat these as binding team decisions. Do not work around them.
+- Before you finish, call guard-check with the files you changed and the packages you added.`;
 
 export function context() {
   const surface = new URLSearchParams(location.search).get('surface') || 'center';
@@ -201,6 +216,7 @@ export function invoke(name, p) {
     case 'remindOwner':
       return { posted: true, where: 'Comment posted on “Payments Architecture Review — 2026-03-12”, mentioning the owner.' };
     case 'updateDecision':
+      if (p.patch?.guard) decisions = decisions.map((d) => (d.id === p.id ? { ...d, guard: p.patch.guard } : d));
       return decisions.find((d) => d.id === p.id);
     case 'getSetup':
       return { spaces: [{ id: '1', key: 'ENG', name: 'Engineering' }], projects: [{ key: 'PAY', name: 'Payments' }] };
@@ -209,6 +225,11 @@ export function invoke(name, p) {
       return { projectKey: 'PAY', decisions: ds, checks: checks.filter((c) => c.issue.projectKey === 'PAY'), totalDecisions: decisions.length };
     }
     case 'getIssueCheck':
+      return issueCheck();
+    case 'getAgentBrief':
+      return { markdown: BRIEF_MD.replace(/PAY-1/g, current), ids: ['DEC-1', 'DEC-5'] };
+    case 'attachBrief':
+      briefs = { ...briefs, [current]: { commentId: '10043', ids: ['DEC-3'], conflicts: [], at: new Date().toISOString() } };
       return issueCheck();
     case 'applyFix': {
       const f = fixes[current][p.decisionId];

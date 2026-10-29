@@ -1,7 +1,7 @@
 // Decision Center (Jira and Confluence global page): team decision health, where decisions are
 // being contradicted, how they age, and the full register.
 import React, { useEffect, useMemo, useState } from 'react';
-import { invoke, open, askRovo, rovoEnabled, getContext, APP_ID } from '../api.js';
+import { invoke, open, askRovo, rovoEnabled, getContext, flag, APP_ID } from '../api.js';
 import { Icon, Logo } from '../components/icons.jsx';
 import { AsyncButton, Banner, Button, DecId, Empty, Field, Kpi, Segmented, Spinner, Tabs, plural } from '../components/primitives.jsx';
 import { DecisionMap, Gauge, GRADE_COLOR, Heatmap, Lifecycle } from '../components/charts.jsx';
@@ -100,7 +100,95 @@ function ConflictHeatmap({ decisions, checks, siteUrl, onOpen }) {
   );
 }
 
-function Setup({ appId, settings, graph, onLoaded }) {
+/** Coding agents: the brief Precedent keeps on work items, and the MCP tools. */
+function AgentSetup({ appId, settings }) {
+  const [opts, setOpts] = useState({ autoBrief: settings?.autoBrief !== false, briefTarget: settings?.briefTarget || 'comment' });
+  const save = async (patch) => {
+    setOpts({ ...opts, ...patch });
+    await invoke('saveSettings', patch);
+    flag('Saved', 'Briefs update the next time each work item is checked.');
+  };
+  return (
+    <div className="card pad-lg">
+      <div className="row gap-6">
+        <Icon name="code" size={18} style={{ color: 'var(--link)' }} />
+        <div className="h2">Coding agents</div>
+      </div>
+      <div className="small muted mt-8">
+        Precedent keeps a short <b>Precedent brief</b> on every work item a decision governs: what to do, what not to do (including denied packages), the code paths each decision covers. Jira's <b>Open in coding tool</b> hands the work item to Claude Code, Cursor, Copilot, Codex or VS Code, so the agent starts out knowing what was decided.
+      </div>
+      <label className="row gap-8 small mt-12" style={{ cursor: 'pointer' }}>
+        <input type="checkbox" checked={opts.autoBrief} onChange={(e) => save({ autoBrief: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--brand)' }} />
+        Keep a brief on governed work items automatically
+      </label>
+      <div className="mt-8">
+        <Segmented
+          value={opts.briefTarget}
+          onChange={(v) => save({ briefTarget: v })}
+          options={[
+            { value: 'description', label: 'In the description' },
+            { value: 'comment', label: 'As a comment' },
+          ]}
+        />
+        <div className="tiny faint mt-8">
+          {opts.briefTarget === 'description'
+            ? 'A marked block at the end of the description: Open in coding tool always includes it. Precedent never checks or rewrites its own block.'
+            : 'One comment, edited in place. Agents see it when they read the work item over the Atlassian MCP server.'}
+        </div>
+      </div>
+      <div className="small muted mt-16">
+        <b>MCP tools.</b> In <b>Rovo Studio</b>, add them to any agent under Tools → Connected apps → Precedent. For Claude Code and other MCP clients (Preview), an org admin enables them in Atlassian Administration → Apps → Sites → Connected apps, then:
+      </div>
+      <div className="code mt-8">{`claude mcp add --transport http precedent https://mcp.atlassian.com/forge/${appId || APP_ID}`}</div>
+      <div className="tiny faint mt-8">precedent-preflight · guard-check · check-work-item · search-decisions · get-decision · record-decision · supersede-decision · log-exception · list-conflicts</div>
+    </div>
+  );
+}
+
+/** Precedent inside Jira's own flows: Create dialog hint, Done gate, Rovo reviewer. */
+function JiraFlows({ createHints }) {
+  const [status, setStatus] = useState(createHints);
+  const [error, setError] = useState(null);
+  return (
+    <div className="card pad-lg">
+      <div className="row gap-6">
+        <Icon name="lock" size={18} style={{ color: 'var(--red)' }} />
+        <div className="h2">Enforce in Jira</div>
+      </div>
+      <div className="col gap-12 small mt-12">
+        <div>
+          <b>1. “Already decided” while creating.</b> The Create dialog warns under the summary when a new work item contradicts a decision.{' '}
+          {status?.projects ? <span className="pill aligned">{`On for ${plural(status.projects.length, 'project')}`}</span> : null}
+          <div className="mt-8">
+            <AsyncButton
+              size="sm"
+              icon={status ? 'refresh' : 'plus'}
+              onClick={async () => {
+                const r = await invoke('enableCreateHints');
+                if (r?.error) setError(r.error);
+                else {
+                  setError(null);
+                  setStatus(r);
+                }
+              }}
+            >
+              {status ? 'Update for new projects' : 'Turn on for all projects'}
+            </AsyncButton>
+          </div>
+          {error ? <div className="mt-8"><Banner tone="error">{error}</Banner></div> : null}
+        </div>
+        <div>
+          <b>2. Block Done while a conflict is open.</b> In the workflow editor, select the transition to Done → <b>Add rule</b> → <b>Validate details</b> → <i>No unresolved decision conflicts (Precedent)</i>. Reviewed conflicts and logged exceptions pass.
+        </div>
+        <div>
+          <b>3. Precedent as a reviewer.</b> In Rovo Studio, open the <b>Precedent</b> agent → Surfaces → turn on <b>Work item</b>. Then assign work items to it, or add <b>Trigger agent action → Precedent</b> to the transition to In Review: it posts a PASS / BLOCKED verdict with the evidence.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Setup({ appId, settings, graph, createHints, onLoaded }) {
   const [setup, setSetup] = useState(null);
   const [space, setSpace] = useState('');
   const [project, setProject] = useState('');
@@ -178,17 +266,8 @@ function Setup({ appId, settings, graph, onLoaded }) {
         </div>
       </div>
       <div className="col gap-16">
-        <div className="card pad-lg">
-          <div className="row gap-6">
-            <Icon name="layers" size={18} style={{ color: 'var(--link)' }} />
-            <div className="h2">Use Precedent from your AI tools (MCP)</div>
-          </div>
-          <div className="small muted mt-8">
-            The seven Precedent actions are MCP tools. In <b>Rovo Studio</b>, add them to any custom agent under <b>Tools → Connected apps → Precedent</b>. For Claude Code and other MCP clients (Preview), an org admin enables the tools in Atlassian Administration → Apps → Sites → Connected apps, then:
-          </div>
-          <div className="code mt-12">{`claude mcp add --transport http precedent https://mcp.atlassian.com/forge/${appId || APP_ID}`}</div>
-          <div className="tiny faint mt-8">search-decisions · get-decision · check-work-item · record-decision · supersede-decision · log-exception · list-conflicts</div>
-        </div>
+        <AgentSetup appId={appId} settings={settings} />
+        <JiraFlows createHints={createHints} />
         <div className="card pad-lg">
           <div className="row gap-6">
             <Icon name="graph" size={18} style={{ color: 'var(--purple)' }} />
@@ -340,7 +419,7 @@ export default function DecisionCenter() {
               <Empty title="No decisions captured yet">Scan Confluence, write a /decision in any page, or create the sample content below to see Precedent in action.</Empty>
             </div>
           ) : null}
-          <Setup appId={appId} settings={data.settings} graph={data.teamworkGraph} onLoaded={load} />
+          <Setup appId={appId} settings={data.settings} graph={data.teamworkGraph} createHints={data.createHints} onLoaded={load} />
         </>
       ) : tab === 'overview' ? (
         <div className="col gap-16">

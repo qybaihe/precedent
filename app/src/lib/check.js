@@ -6,6 +6,8 @@
 //  - related:  no guardrail hit, but the decision is clearly about the same topic (BM25)
 
 import { tokenize, sentences, snippet, stem } from './text.js';
+import { termsFromList } from './guardrails.js';
+import { evaluateGuard, guardAvoidPhrases, normalizeGuard } from './guard.js';
 
 const WINDOW = 10; // max token distance between the words of a multi-word guardrail
 
@@ -162,7 +164,16 @@ const WEAK_OVERLAP = new Set(
 function inScope(decision, work) {
   const projects = decision.scope?.projects || [];
   if (projects.length && work.projectKey && !projects.includes(work.projectKey)) return false;
-  return true;
+  return evaluateGuard(decision, work).applies;
+}
+
+/** Guardrail terms plus the decision's guard keywords and denied package names. */
+function avoidTerms(d) {
+  const terms = [...(d.guardrails?.avoid || [])];
+  for (const t of termsFromList(guardAvoidPhrases(d))) {
+    if (!terms.some((x) => x.tokens.join(' ') === t.tokens.join(' '))) terms.push(t);
+  }
+  return terms;
 }
 
 function summarizeDecision(d) {
@@ -180,11 +191,15 @@ function summarizeDecision(d) {
     reviewBy: d.reviewBy || null,
     reviewedAt: d.reviewedAt || null,
     assumptions: d.assumptions || [],
+    guard: normalizeGuard(d.guard),
   };
 }
 
 /**
- * @param {{text: string, projectKey?: string, labels?: string[], issueKey?: string}} work
+ * @param {{text: string, projectKey?: string, labels?: string[], issueKey?: string,
+ *          paths?: string[], packages?: string[], jqlScope?: Object<string, boolean>}} work
+ *   paths/packages: files a coding agent touches and dependencies it adds (checked against guards);
+ *   jqlScope: decision id -> whether the work item matches that decision's guard JQL
  * @param {Array} decisions full decision objects
  * @param {{acknowledged?: string[]}} options decisions already reviewed for this work item
  */
@@ -195,11 +210,25 @@ export function checkWork(work, decisions, { acknowledged = [] } = {}) {
 
   const conflicts = [];
   const aligned = [];
+  const governing = [];
   const hitIds = new Set();
 
   for (const d of active) {
     const exceptions = (d.exceptions || []).filter((e) => work.issueKey && e.issueKey === work.issueKey);
-    for (const term of d.guardrails?.avoid || []) {
+    const guard = evaluateGuard(d, work);
+    if (guard.governed.length || guard.byJql) governing.push({ decision: summarizeDecision(d), paths: guard.governed, jql: guard.byJql ? d.guard.jql : null });
+    for (const v of guard.violations) {
+      const entry = { decision: summarizeDecision(d), term: v.item, rule: 'package', evidence: `Adds the package “${v.item}” (the decision rules out ${v.pattern})` };
+      if (exceptions.length) {
+        if (!aligned.some((a) => a.decision.id === d.id)) aligned.push({ ...entry, reason: `Exception approved: ${exceptions[0].reason}` });
+      } else {
+        const existing = conflicts.find((c) => c.decision.id === d.id);
+        if (existing) existing.terms.push(v.item);
+        else conflicts.push({ ...entry, terms: [v.item], acknowledged: acknowledged.includes(d.id) });
+      }
+      hitIds.add(d.id);
+    }
+    for (const term of avoidTerms(d)) {
       const idx = matchTerm(term, toks);
       if (idx < 0) continue;
       const entry = { decision: summarizeDecision(d), term: term.text, evidence: evidence(text, term) };
@@ -210,8 +239,9 @@ export function checkWork(work, decisions, { acknowledged = [] } = {}) {
           aligned.push({ ...entry, reason: `Exception approved: ${exceptions[0].reason}` });
       } else {
         const existing = conflicts.find((c) => c.decision.id === d.id);
-        if (existing) existing.terms.push(term.text);
-        else conflicts.push({ ...entry, terms: [term.text], acknowledged: acknowledged.includes(d.id) });
+        if (existing) {
+          if (!existing.terms.some((t) => t.toLowerCase() === term.text.toLowerCase())) existing.terms.push(term.text);
+        } else conflicts.push({ ...entry, terms: [term.text], acknowledged: acknowledged.includes(d.id) });
       }
       hitIds.add(d.id);
     }
@@ -233,10 +263,11 @@ export function checkWork(work, decisions, { acknowledged = [] } = {}) {
 
   const openConflicts = conflicts.filter((c) => !c.acknowledged);
   return {
-    status: openConflicts.length ? 'conflict' : conflicts.length ? 'acknowledged' : related.length || aligned.length ? 'related' : 'clear',
+    status: openConflicts.length ? 'conflict' : conflicts.length ? 'acknowledged' : related.length || aligned.length || governing.length ? 'related' : 'clear',
     conflicts,
     aligned,
     related,
+    governing,
     checkedAt: new Date().toISOString(),
   };
 }

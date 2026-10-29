@@ -273,6 +273,13 @@ code { font-family: var(--mono); font-size: 12.5px; background: var(--neutral); 
 .diff .before { color: var(--subtle); }
 .diff .arrow { color: var(--subtlest); font-size: 11.5px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
 .mini-decision { padding: 10px 12px; }
+.brief { border-radius: 12px; padding: 12px; background: var(--raised); border: 1px solid var(--border); box-shadow: inset 3px 0 0 #6c5ce7; }
+.brief-icon { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #1d7afc, #6c5ce7); }
+.brief-text { margin: 0; max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word; font: 11.5px/1.5 var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); background: var(--sunken); border-radius: 8px; padding: 10px; color: var(--text); user-select: text; }
+.guard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.guard-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font: 600 12px/1.6 var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace); background: var(--sunken); color: var(--text); }
+.guard-chip.deny { background: rgba(226, 72, 61, 0.1); color: var(--red); }
+.guard-chip.allow { background: rgba(34, 160, 107, 0.12); color: var(--green); }
 
 /* local preview of the dark theme (inside Atlassian the host injects the real tokens) */
 @media (prefers-color-scheme: dark) {

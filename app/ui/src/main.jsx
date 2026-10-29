@@ -29,5 +29,11 @@ function App() {
   return <Surface />;
 }
 
+const UIM = 'precedent-create-warning';
+
 if (!IN_FORGE) document.documentElement.dataset.preview = 'true';
-createRoot(document.getElementById('root')).render(<App />);
+// the Create-dialog modification has no screen: it only watches the summary field
+getContext()
+  .then((c) => (c.moduleKey === UIM ? import('./uim.js').then((m) => m.startCreateHints(c)) : null))
+  .catch(() => null)
+  .then((uim) => uim === null && createRoot(document.getElementById('root')).render(<App />));

@@ -3,14 +3,16 @@
 // Every response is plain JSON with decision ids and source links so agents can cite them.
 
 import { checkWork } from './lib/check.js';
-import { checkIssue, enqueueRecheck } from './lib/checker.js';
+import { checkIssue, enqueueRecheck, jqlScopes } from './lib/checker.js';
 import { bm25, buildIndex } from './lib/check.js';
 import { listDecisions, getDecision, createDecision, saveDecision, listChecks, getCheck, saveCheck } from './lib/store.js';
-import { siteUrl } from './lib/products.js';
+import { siteUrl, decisionLogUrl } from './lib/products.js';
 import { snippet } from './lib/text.js';
 import { titleFrom } from './lib/adf.js';
 import { suggestFix } from './lib/fix.js';
 import { outdated, reviewDate } from './lib/health.js';
+import { normalizeGuard, packagesFromText, pathsFromText } from './lib/guard.js';
+import { buildBrief, briefMarkdown, guardVerdicts } from './lib/brief.js';
 
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 
@@ -33,6 +35,87 @@ function brief(d) {
     revisitBy: reviewDate(d)?.slice(0, 10) || null,
     possiblyOutdated: outdated(d).possibly,
     outdatedBecause: outdated(d).reasons,
+    guard: normalizeGuard(d.guard),
+  };
+}
+
+const listInput = (v) => (Array.isArray(v) ? v : String(v || '').split(/[,\n]/)).map((x) => String(x).trim()).filter(Boolean);
+
+/** Fill in a coding agent's work: files and packages it named, plus any it mentioned in the text. */
+function agentWork(payload, text) {
+  const paths = [...new Set([...listInput(payload.paths), ...pathsFromText(text)])];
+  const packages = [...new Set([...listInput(payload.packages), ...packagesFromText(text)])];
+  return { paths, packages };
+}
+
+/** Run the check for an agent: a work item (live, with its JQL scope) and/or a plan. */
+async function agentCheck(payload) {
+  const issueKey = contextIssueKey(payload);
+  const decisions = await listDecisions();
+  let text = String(payload.plan || payload.diffSummary || payload.text || '').trim();
+  let projectKey = String(payload.projectKey || '').trim().toUpperCase() || undefined;
+  let issue = null;
+  if (issueKey) {
+    const r = await checkIssue(issueKey, { decisions });
+    issue = r.issue;
+    projectKey = projectKey || issue.projectKey;
+    if (!text && !listInput(payload.paths).length && !listInput(payload.packages).length) return { issueKey, issue, decisions, result: r };
+    text = [issue.summary, text].filter(Boolean).join('\n');
+  }
+  const { paths, packages } = agentWork(payload, text);
+  const scopes = issueKey ? await jqlScopes(decisions, issueKey) : {};
+  const jqlScope = Object.fromEntries(Object.entries(scopes).map(([id, keys]) => [id, keys.has(issueKey)]));
+  const result = checkWork({ text, projectKey, issueKey: issueKey || undefined, paths, packages, jqlScope }, decisions);
+  for (const c of result.conflicts) {
+    const d = decisions.find((x) => x.id === c.decision.id);
+    const f = d && c.rule !== 'package' ? suggestFix({ summary: text, description: '' }, c, d) : null;
+    if (f) c.fix = { kind: f.kind, from: f.from, to: f.to, advice: f.advice };
+    if (c.rule === 'package') {
+      const allow = normalizeGuard(d?.guard)?.packages.allow || [];
+      if (allow.length) c.fix = { kind: 'advice', advice: `Use ${allow.join(' or ')} instead of ${c.terms.join(', ')}.` };
+    }
+  }
+  return { issueKey, issue, decisions, result, paths, packages };
+}
+
+/** precedent-preflight: everything a coding agent must know before it starts, as a short brief. */
+export async function preflight(payload) {
+  const { issueKey, issue, decisions, result, paths, packages } = await agentCheck(payload);
+  if (!issueKey && !String(payload.plan || payload.text || '').trim() && !paths?.length && !packages?.length) {
+    return { error: 'Provide issueKey, or describe the task in plan (and optionally the paths and packages you expect to touch).' };
+  }
+  const base = await siteUrl();
+  const b = buildBrief({ issueKey, result, decisions, logUrl: decisionLogUrl(base) });
+  return {
+    workItem: issue ? { key: issue.key, summary: issue.summary, url: issue.url } : null,
+    brief: briefMarkdown(b),
+    bindingDecisions: b.items.map((i) => ({ id: i.id, title: i.title, do: i.do, dont: i.dont, usePackages: i.usePackages, deniedPackages: i.deniedPackages, governsPaths: i.paths, conflict: i.conflict, possiblyOutdated: i.outdated, exceptionsForThisWorkItem: i.exceptions, source: i.url })),
+    checked: { paths: paths || [], packages: packages || [] },
+    guidance: 'Follow the brief. Quote decision ids when you explain a choice. If the task needs to break a decision, stop and ask the user whether to log an exception or supersede the decision; never work around it silently. Call guard-check before you finish.',
+  };
+}
+
+/** guard-check: a coding agent self-checks its change (files, packages, summary) before finishing. */
+export async function guardCheck(payload) {
+  const text = String(payload.diffSummary || payload.plan || '').trim();
+  if (!text && !listInput(payload.paths).length && !listInput(payload.packages).length) {
+    return { error: 'Provide diffSummary (what you changed), and the paths and packages you changed or added.' };
+  }
+  const { decisions, result, paths, packages } = await agentCheck({ ...payload, plan: text });
+  const v = guardVerdicts(result, decisions);
+  const fails = v.decisions.filter((d) => d.verdict === 'fail');
+  return {
+    overall: v.overall,
+    message:
+      v.overall === 'fail'
+        ? `FAIL: the change violates ${fails.map((d) => d.id).join(', ')}. Do not finish: revert those parts${fails.some((d) => d.doInstead) ? ' and follow the compliant alternative' : ''}, or ask the user to request an exception or a superseding decision from ${fails.map((d) => d.owner).filter(Boolean).join(', ') || 'the owner'}.`
+        : v.overall === 'warn'
+          ? 'WARN: no violation found, but related or possibly outdated decisions apply. Mention them in your summary.'
+          : v.decisions.length
+            ? 'PASS: the change respects every decision that governs it.'
+            : 'PASS: no recorded decision governs this change.',
+    decisions: v.decisions,
+    checked: { paths, packages },
   };
 }
 

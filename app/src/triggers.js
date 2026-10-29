@@ -3,9 +3,8 @@
 import { checkIssue, recheck, enqueueRecheck, jobs } from './lib/checker.js';
 import { harvestConfluencePage, harvestJiraComment } from './lib/harvest.js';
 import { getSettings, deleteCheck, listDecisions, listChecks } from './lib/store.js';
-import { recentPageIds, siteUrl } from './lib/products.js';
+import { recentPageIds, siteUrl, decisionLogUrl } from './lib/products.js';
 import { syncDecisionsToGraph } from './lib/graph.js';
-import { getAppContext } from '@forge/api';
 
 const CONTENT_FIELDS = new Set(['summary', 'description', 'labels', 'components', 'Component']);
 
@@ -54,9 +53,7 @@ export async function onConfluencePage(event) {
 async function syncGraph() {
   try {
     const [decisions, checks, base] = await Promise.all([listDecisions(), listChecks(), siteUrl()]);
-    const app = getAppContext();
-    const logUrl = `${base}/jira/apps/${app.appAri.appId}/${app.environmentAri.environmentId}`;
-    await syncDecisionsToGraph(decisions, checks, { logUrl });
+    await syncDecisionsToGraph(decisions, checks, { logUrl: decisionLogUrl(base) });
   } catch (e) {
     console.warn(`teamwork graph sync failed: ${e.message}`);
   }

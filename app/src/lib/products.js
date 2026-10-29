@@ -2,9 +2,10 @@
 // All calls run as the app (asApp) because they happen in triggers, queues and Rovo actions
 // where there is no interactive user; user-facing resolvers check permissions first.
 
-import api, { route } from '@forge/api';
+import api, { route, getAppContext } from '@forge/api';
 import { kvs } from '@forge/kvs';
 import { adfToText } from './adf.js';
+import { stripBrief } from './brief.js';
 
 async function json(res, what) {
   if (!res.ok) {
@@ -32,6 +33,16 @@ export async function siteUrl() {
 
 const ISSUE_FIELDS = 'summary,description,labels,components,project,issuetype,status,assignee,reporter,created,updated';
 
+/** The Jira Decision Log page of this installation. */
+export function decisionLogUrl(base) {
+  try {
+    const app = getAppContext();
+    return `${base}/jira/apps/${app.appAri.appId}/${app.environmentAri.environmentId}`;
+  } catch {
+    return `${base}/jira/apps`;
+  }
+}
+
 export async function getIssue(key) {
   return json(await api.asApp().requestJira(route`/rest/api/3/issue/${key}?fields=${ISSUE_FIELDS}`), `get issue ${key}`);
 }
@@ -39,7 +50,8 @@ export async function getIssue(key) {
 /** Text that represents the work item for matching: summary + description. */
 export function issueText(issue) {
   const f = issue.fields || {};
-  return [f.summary || '', adfToText(f.description).trim()].join('\n');
+  // Precedent's own brief block mentions what decisions rule out: never check it as the work itself
+  return [f.summary || '', adfToText(stripBrief(f.description).adf).trim()].join('\n');
 }
 
 export function issueMeta(issue, base) {
@@ -81,6 +93,40 @@ export async function addComment(issueKey, adfBody) {
     }),
     'add comment',
   );
+}
+
+export async function updateComment(issueKey, commentId, adfBody) {
+  const res = await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}/comment/${commentId}?notifyUsers=false`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body: adfBody }),
+  });
+  if (res.status === 404) return null; // someone deleted it
+  return json(res, 'update comment');
+}
+
+export async function deleteComment(issueKey, commentId) {
+  const res = await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}/comment/${commentId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) console.warn(`delete comment ${issueKey}/${commentId}: ${res.status}`);
+}
+
+/** Number of work items matching a JQL query (Jira's approximate count, fine for thresholds). */
+export async function countIssues(jql) {
+  const data = await json(
+    await api.asApp().requestJira(route`/rest/api/3/search/approximate-count`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jql }),
+    }),
+    'count issues',
+  );
+  return Number(data.count) || 0;
+}
+
+/** Keys of the work items matching a JQL query. */
+export async function issueKeysMatching(jql, max = 200) {
+  const issues = await searchIssues(jql, { max, fields: ['summary'] });
+  return issues.map((i) => i.key);
 }
 
 export async function updateIssue(key, fields) {

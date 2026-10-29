@@ -34,6 +34,20 @@ modules:
         function: resolver
       title: Precedent — Decision Log
       icon: resource:icons;precedent.svg
+  jira:uiModifications:
+    - key: precedent-create-warning
+      title: Precedent — already decided
+      resource: ui
+      resolver:
+        function: resolver
+  jira:workflowValidator:
+    - key: precedent-no-conflicts
+      name: No unresolved decision conflicts (Precedent)
+      description: Blocks the transition while the work item contradicts an active team decision, unless the conflict was reviewed or an exception was logged.
+      function: workflow-validator
+      projectTypes:
+        - company-managed
+        - team-managed
   jira:entityProperty:
     - key: precedent-issue-index
       entityType: issue
@@ -120,6 +134,8 @@ modules:
         - supersede-decision
         - log-exception
         - list-conflicts
+        - precedent-preflight
+        - guard-check
   # ---------------- Teamwork Graph ----------------
   graph:connector:
     - key: precedent-decisions-connector
@@ -149,6 +165,8 @@ modules:
         - supersede-decision
         - log-exception
         - list-conflicts
+        - precedent-preflight
+        - guard-check
   action:
     - key: search-decisions
       name: Search team decisions
@@ -323,7 +341,75 @@ modules:
           required: false
           description: Jira project key such as PAY. Leave empty for the whole site.
 
+    - key: precedent-preflight
+      name: Preflight for a coding task
+      function: action-preflight
+      actionVerb: GET
+      description: >-
+        Call FIRST, before coding a Jira work item or any change to architecture, data stores, vendors or dependencies.
+        Returns a short brief of the binding team decisions: do, don't (incl. denied packages), governed paths, exceptions.
+      inputs:
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: Jira work item key such as PAY-12.
+        plan:
+          title: Task or plan
+          type: string
+          required: false
+          description: What you are about to do, in plain language (used when there is no work item, or to add detail).
+        paths:
+          title: Files
+          type: string
+          required: false
+          description: Comma-separated file paths or directories you expect to change, e.g. "services/payments/ledger.ts, db/migrations".
+        packages:
+          title: Packages
+          type: string
+          required: false
+          description: Comma-separated packages you plan to add, e.g. "mongoose, zod".
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key the task belongs to, so project-scoped decisions apply.
+    - key: guard-check
+      name: Check a change against decision guards
+      function: action-guard-check
+      actionVerb: GET
+      description: >-
+        Call before finishing a coding task. Checks the change (summary, changed files, added packages) against decision guards; returns pass, warn or fail per decision, with why and what to do instead.
+      inputs:
+        diffSummary:
+          title: Change summary
+          type: string
+          required: true
+          description: What you changed, e.g. "Added a Mongoose model for payout events in services/payments/events.ts". Install commands and package.json lines are recognised.
+        paths:
+          title: Changed files
+          type: string
+          required: false
+          description: Comma-separated paths of the files you changed.
+        packages:
+          title: Added packages
+          type: string
+          required: false
+          description: Comma-separated packages you added.
+        issueKey:
+          title: Work item key
+          type: string
+          required: false
+          description: The Jira work item the change is for, if any.
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key, so project-scoped decisions apply.
+
   function:
+    - key: workflow-validator
+      handler: index.validateTransition
     - key: twg-connection-change
       handler: index.onConnectionChange
     - key: resolver
@@ -357,6 +443,10 @@ modules:
       handler: index.logException
     - key: action-conflicts
       handler: index.listConflicts
+    - key: action-preflight
+      handler: index.preflight
+    - key: action-guard-check
+      handler: index.guardCheck
 
 resources:
   # Custom UI bundle for every surface (built from ui/ with `npm run build:ui`)
@@ -373,6 +463,8 @@ permissions:
     - read:jira-work
     - write:jira-work
     - read:jira-user
+    - manage:jira-configuration
+    - manage:jira-project
     - read:confluence-content.all
     - read:confluence-content.summary
     - read:confluence-space.summary

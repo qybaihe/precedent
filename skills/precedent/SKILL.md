@@ -13,7 +13,9 @@ Use it so you never quietly implement something the team already ruled out.
 
 | Tool | When |
 |---|---|
-| `check-work-item` | **Before** implementing any non-trivial change. Pass `plan` (one or two sentences describing what you are about to do) or `issueKey` if the task comes from a Jira work item. |
+| `precedent-preflight` | **First**, before writing code for a Jira work item or any change to architecture, data stores, vendors or dependencies. Pass `issueKey` and/or `plan`, plus the `paths` and `packages` you expect to touch. Returns a short brief: do, don't (incl. denied packages), governed paths, exceptions, possibly outdated decisions. |
+| `guard-check` | **Before you finish.** Pass `diffSummary` (what you changed), the changed `paths` and added `packages`. `fail` means you violated a decision: revert that part or ask the user about an exception / supersede. |
+| `check-work-item` | Check a plan or a Jira work item for conflicts with evidence and a compliant alternative. |
 | `search-decisions` | The user asks "did we decide…", "why do we use…", or you are choosing between technologies. |
 | `get-decision` | You need the rationale, owner, source page or history of a `DEC-n`. |
 | `record-decision` | The user states a decision ("from now on…", "we decided…"). Include `avoid` / `prefer` lists. |
@@ -22,9 +24,12 @@ Use it so you never quietly implement something the team already ruled out.
 
 ## Workflow
 
+0. If the task came from Jira ("Open in coding tool"), the work item may already contain a
+   **🧭 Precedent brief** (end of the description, or a comment). Treat it as binding.
 1. Before writing code for a task that touches architecture, data storage, external services,
-   security, logging, or build/deploy tooling, call `check-work-item` with a `plan` that names the
-   concrete technologies involved (e.g. "store the payout ledger in a MongoDB collection").
+   security, logging, or build/deploy tooling, call `precedent-preflight` (or `check-work-item`
+   with a `plan` that names the concrete technologies involved, e.g. "store the payout ledger in a
+   MongoDB collection").
 2. If the verdict is `conflict`:
    - Stop. Do not implement the conflicting approach.
    - Tell the user which decision is contradicted: **DEC-n — title**, the owner, the date and the
@@ -36,6 +41,8 @@ Use it so you never quietly implement something the team already ruled out.
 3. If the verdict is `related`, read the related decisions and follow them; mention them briefly.
 4. If the verdict is `clear`, proceed. If you and the user make a lasting choice along the way,
    offer to `record-decision` so the next person (or agent) knows.
+5. Before you report the task as done, call `guard-check` with the files you changed and the
+   packages you added. Only finish on `pass` or `warn`.
 
 ## Example
 

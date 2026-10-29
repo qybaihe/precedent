@@ -39,6 +39,10 @@ const PATHS = {
   timeline: 'M3 12h18M7 12V8m5 4v6m5-6V6',
   layers: 'm12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5',
   inbox: 'M4 13h4l1.5 3h5L16 13h4M4 13l2.5-8h11L20 13v6H4v-6Z',
+  code: 'm8 7-5 5 5 5m8-10 5 5-5 5M14 4l-4 16',
+  copy: 'M9 9h10v11H9V9Zm-4 6H4V4h11v1',
+  lock: 'M6 11h12v9H6v-9Zm2.5 0V8a3.5 3.5 0 0 1 7 0v3',
+  compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm3.5-12.5-2 5-5 2 2-5 5-2Z',
 };
 
 export function Icon({ name, size = 16, stroke = 2, className, style, title }) {
