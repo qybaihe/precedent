@@ -1,0 +1,19 @@
+{
+  "name": "precedent-ui",
+  "private": true,
+  "type": "module",
+  "description": "Custom UI for Precedent (Decision Center, Decision Radar, issue panel, page byline). Builds into ../static/ui.",
+  "scripts": {
+    "build": "vite build",
+    "preview": "vite --port 5174"
+  },
+  "dependencies": {
+    "@forge/bridge": "^7.2.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.4",
+    "vite": "5.4.11"
+  }
+}

@@ -7,6 +7,7 @@ const decision = (id, t) => ({
   attrs: { localId: `dl-${id}` },
   content: [{ type: 'decisionItem', attrs: { localId: `di-${id}`, state: 'DECIDED' }, content: [text(t)] }],
 });
+const li = (t) => ({ type: 'listItem', content: [p(t)] });
 const row = (k, v) => ({
   type: 'tableRow',
   content: [
@@ -66,6 +67,33 @@ export const SAMPLE_PAGES = [
   },
 ];
 
+// Meeting notes where the decisions are written in prose, not as /decision items: open the page's
+// Precedent byline and click "Find decisions on this page".
+SAMPLE_PAGES.push({
+  title: 'Payments Sync — 2026-10-27',
+  adf: {
+    type: 'doc',
+    version: 1,
+    content: [
+      p(text('Attendees: ', [{ type: 'strong' }]), 'Priya Shah, Marco Rossi, Dana Kim, Sam Lee'),
+      h(2, 'Discussion'),
+      p('Marco walked through the two settlement-file incidents from September. After some back and forth we agreed that refund webhooks are retried for 72 hours before they move to the dead-letter queue.'),
+      p('Maybe we should consider GraphQL for the partner API? Parked until Q1.'),
+      p('Dana confirmed the EU card rollout is on track for December.'),
+      h(2, 'Decisions'),
+      {
+        type: 'bulletList',
+        content: [
+          li('All new payment services publish domain events through Kafka instead of direct HTTP callbacks — decided by Marco Rossi'),
+          li('Going forward, settlement reports are generated in the data warehouse, not in the payments database.'),
+        ],
+      },
+      h(2, 'Action items'),
+      { type: 'taskList', attrs: { localId: 'tl-1' }, content: [{ type: 'taskItem', attrs: { localId: 'ti-1', state: 'TODO' }, content: [text('Marco to draft the Kafka topic naming guide')] }] },
+    ],
+  },
+});
+
 export const SAMPLE_ISSUES = [
   {
     summary: 'Store payout ledger in MongoDB for flexible schemas',
@@ -102,5 +130,10 @@ export const SAMPLE_ISSUES = [
     description: 'Merchants miss webhooks during short outages. Retry failed deliveries up to 8 times with exponential backoff and jitter.',
     labels: ['webhooks'],
   },
+  {
+    // contradicts the Kafka decision in the meeting notes once that decision is tracked
+    summary: 'Notify the ledger of settled refunds with direct HTTP callbacks',
+    description: 'When a refund settles, the refunds service calls the ledger service with direct HTTP callbacks so merchant balances update immediately.',
+    labels: ['payments', 'refunds'],
+  },
 ];
-

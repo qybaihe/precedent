@@ -1,4 +1,4 @@
-// Resolvers behind the UI Kit surfaces (issue panel, Decision Radar, Decision Log, page byline).
+// Resolvers behind the Custom UI surfaces (issue panel, Decision Radar, Decision Center, page byline).
 // Issue and page ids always come from the trusted Forge context, never from the client payload.
 
 import Resolver from '@forge/resolver';
@@ -16,13 +16,55 @@ import {
   saveSettings,
 } from './lib/store.js';
 import { acknowledge, logException } from './actions.js';
-import { listProjects, listSpaces, userCanBrowse, siteUrl } from './lib/products.js';
+import { listProjects, listSpaces, userCanBrowse, userCanEdit, siteUrl, getIssue, updateIssue, addComment, getPage, addPageComment } from './lib/products.js';
 import { createSampleData } from './sample.js';
+import { applyReplacementsToAdf, applyReplacementsToText, preferredAlternative } from './lib/fix.js';
+import { findDecisionCandidates } from './lib/extract.js';
+import { decisionHealth, teamHealth, REVIEW_DAYS } from './lib/health.js';
+import { dateFromTitle } from './lib/adf.js';
+import { pageUrl } from './lib/harvest.js';
 
 const resolver = new Resolver();
 
 function issueKeyFrom(context) {
   return context.extension?.issue?.key;
+}
+
+/** Per decision: open conflicts, aligned and related work items. */
+function impactRefs(checks) {
+  const refs = {};
+  const at = (id) => (refs[id] ||= { conflicts: 0, aligned: 0, related: 0 });
+  for (const c of checks) {
+    for (const x of c.conflicts) at(x.decision.id).conflicts += x.acknowledged ? 0 : 1;
+    for (const x of c.aligned) at(x.decision.id).aligned += 1;
+    for (const x of c.related) at(x.decision.id).related += 1;
+  }
+  return refs;
+}
+
+/** What the browser needs from a stored check (no rationale or full decision copies). */
+function slimCheck(c) {
+  const ref = (x) => ({ id: x.decision.id, title: x.decision.title });
+  return {
+    issue: c.issue,
+    status: c.status,
+    checkedAt: c.checkedAt,
+    conflicts: c.conflicts.map((x) => ({ decision: ref(x), terms: x.terms, evidence: x.evidence, acknowledged: x.acknowledged, fix: x.fix || null })),
+    aligned: c.aligned.map((x) => ({ decision: ref(x), reason: x.reason })),
+    related: c.related.map((x) => ({ decision: ref(x) })),
+  };
+}
+
+const mention = (owner) => (owner?.accountId ? { type: 'mention', attrs: { id: owner.accountId } } : { type: 'text', text: owner?.name || 'the owner' });
+const escapeHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Decisions found in meeting-note prose get their own key prefix: harvesting archives anything under
+// `confluence:<page>:` that is no longer a /decision item, and these never were.
+const NOTES_PREFIX = (pageId) => `confluence-notes:${pageId}:`;
+async function pageDecisions(pageId) {
+  if (!pageId) return [];
+  const [items, notes] = await Promise.all([decisionsFromSourcePrefix(`confluence:${pageId}:`), decisionsFromSourcePrefix(NOTES_PREFIX(pageId))]);
+  return [...items, ...notes];
 }
 
 // ---------- issue panel ----------
@@ -32,6 +74,44 @@ resolver.define('getIssueCheck', async ({ context }) => {
   if (!key) return { error: 'No work item in context' };
   if (!(await userCanBrowse(key))) return { error: 'You do not have access to this work item' };
   return checkIssue(key);
+});
+
+resolver.define('applyFix', async ({ payload, context }) => {
+  const key = issueKeyFrom(context);
+  if (!key) return { error: 'No work item in context' };
+  if (!(await userCanEdit(key))) return { error: 'You do not have permission to edit this work item' };
+  // recompute on the server from the live work item: never trust a rewrite sent by the browser
+  const [issue, decision] = await Promise.all([getIssue(key), getDecision(payload.decisionId)]);
+  if (!decision) return { error: `${payload.decisionId} not found` };
+  const current = await checkIssue(issue);
+  const fix = current.fixes?.[decision.id];
+  if (!fix || fix.kind !== 'rewrite') return { error: 'There is no safe automatic rewrite for this conflict. Ask Precedent for options, or log an exception.' };
+  const fields = {};
+  const summary = applyReplacementsToText(issue.fields.summary || '', fix.replacements);
+  if (summary !== issue.fields.summary) fields.summary = summary;
+  if (issue.fields.description) {
+    const r = applyReplacementsToAdf(issue.fields.description, fix.replacements);
+    if (r.changed) fields.description = r.adf;
+  }
+  if (!Object.keys(fields).length) return { error: 'Nothing to change.' };
+  await updateIssue(key, fields);
+  await addComment(key, {
+    type: 'doc',
+    version: 1,
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Precedent: ', marks: [{ type: 'strong' }] },
+          { type: 'text', text: `updated to comply with ${decision.id} (“${decision.title}”). Replaced “${fix.from}” with “${fix.to}”${fields.description ? ' in the summary and description' : ' in the summary'}.` },
+        ],
+      },
+      ...(fields.summary ? [{ type: 'paragraph', content: [{ type: 'text', text: `Previous summary: “${issue.fields.summary}”`, marks: [{ type: 'em' }] }] }] : []),
+      { type: 'paragraph', content: [{ type: 'text', text: 'Requested by ' }, mention({ accountId: context.accountId }), { type: 'text', text: '.' }] },
+    ],
+  });
+  const after = await checkIssue(key);
+  return { check: after, applied: { from: fix.from, to: fix.to, summary: fields.summary || null } };
 });
 
 resolver.define('acknowledge', async ({ payload, context }) => {
@@ -81,6 +161,57 @@ resolver.define('listDecisions', async () => {
   return { decisions, refs, settings: await getSettings() };
 });
 
+resolver.define('getOverview', async () => {
+  const [decisions, checks, settings, base] = await Promise.all([listDecisions(), listChecks(), getSettings(), siteUrl().catch(() => '')]);
+  const refs = impactRefs(checks);
+  const team = teamHealth(decisions, refs);
+  const { byId, ...summary } = team;
+  return {
+    decisions: decisions.map((d) => ({ ...d, health: byId[d.id] || decisionHealth(d, refs[d.id]) })),
+    refs,
+    checks: checks.map(slimCheck),
+    team: summary,
+    settings: { ...settings, reviewDays: REVIEW_DAYS },
+    siteUrl: base,
+  };
+});
+
+resolver.define('reviewDecision', async ({ payload, context }) => {
+  const d = await getDecision(payload.id);
+  if (!d) return null;
+  const now = new Date();
+  const saved = await saveDecision({
+    ...d,
+    reviewedAt: now.toISOString(),
+    reviewBy: new Date(now.getTime() + REVIEW_DAYS * 86400000).toISOString(),
+    history: [...(d.history || []), { at: now.toISOString(), what: 'Reviewed: still valid', by: context.accountId }],
+  });
+  return saved;
+});
+
+resolver.define('remindOwner', async ({ payload, context }) => {
+  const d = await getDecision(payload.id);
+  if (!d) return { posted: false, error: 'Decision not found' };
+  const h = decisionHealth(d);
+  const due = new Date(h.reviewBy).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const ask = `${d.id} “${d.title}” is ${h.reviewState === 'overdue' ? `overdue for review (since ${due})` : `due for review on ${due}`}. Is it still valid? Confirm it with “Still valid” in Precedent's Decision Log, or supersede it if things have changed.`;
+  let where;
+  try {
+    if (d.source?.type === 'confluence' && d.source.pageId) {
+      const who = d.owner?.accountId ? `<ac:link><ri:user ri:account-id="${escapeHtml(d.owner.accountId)}" /></ac:link>` : escapeHtml(d.owner?.name || 'Decision owner');
+      await addPageComment(d.source.pageId, `<p><strong>Precedent review reminder</strong> for ${who}: ${escapeHtml(ask)}</p>`);
+      where = `Comment posted on “${d.source.title}”${d.owner?.accountId ? ', mentioning the owner' : ''}.`;
+    } else if (d.source?.issueKey) {
+      await addComment(d.source.issueKey, { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Precedent review reminder for ', marks: [{ type: 'strong' }] }, mention(d.owner), { type: 'text', text: `: ${ask}` }] }] });
+      where = `Comment posted on ${d.source.issueKey}.`;
+    } else return { posted: false, error: 'This decision has no source page or work item to comment on.' };
+  } catch (e) {
+    return { posted: false, error: e.message.slice(0, 200) };
+  }
+  await saveDecision({ ...d, history: [...(d.history || []), { at: new Date().toISOString(), what: `Review reminder sent to ${d.owner?.name || 'the owner'}`, by: context.accountId }] });
+  return { posted: true, where };
+});
+
 resolver.define('getDecision', async ({ payload }) => {
   const d = await getDecision(payload.id);
   if (!d) return null;
@@ -98,7 +229,7 @@ resolver.define('getDecision', async ({ payload }) => {
       };
     })
     .filter(Boolean);
-  return { decision: d, workItems };
+  return { decision: { ...d, health: decisionHealth(d, impactRefs(checks)[d.id]) }, workItems };
 });
 
 resolver.define('updateDecision', async ({ payload, context }) => {
@@ -150,7 +281,13 @@ resolver.define('getRadar', async ({ context }) => {
   const [decisions, checks] = await Promise.all([listDecisions(), listChecks()]);
   const mine = checks.filter((c) => c.issue?.projectKey === projectKey);
   const active = decisions.filter((d) => d.status === 'active' && (!d.scope?.projects?.length || d.scope.projects.includes(projectKey)));
-  return { projectKey, decisions: active, checks: mine, totalDecisions: decisions.length };
+  const refs = impactRefs(checks);
+  return {
+    projectKey,
+    decisions: active.map((d) => ({ ...d, health: decisionHealth(d, refs[d.id]), preferred: preferredAlternative(d) })),
+    checks: mine.map(slimCheck),
+    totalDecisions: decisions.length,
+  };
 });
 
 resolver.define('rescanProject', async ({ context }) => {
@@ -162,16 +299,60 @@ resolver.define('rescanProject', async ({ context }) => {
 // ---------- confluence page byline ----------
 
 resolver.define('getPageDecisions', async ({ context }) => {
-  const pageId = context.extension?.content?.id;
-  const decisions = pageId ? await decisionsFromSourcePrefix(`confluence:${pageId}:`) : [];
+  const decisions = await pageDecisions(context.extension?.content?.id);
   const checks = await listChecks();
+  const refs = impactRefs(checks);
   return decisions.map((d) => ({
-    decision: d,
+    decision: { ...d, health: decisionHealth(d, refs[d.id]) },
     conflicts: checks
       .filter((c) => c.conflicts.some((x) => x.decision.id === d.id && !x.acknowledged))
       .map((c) => c.issue),
     aligned: checks.filter((c) => c.aligned.some((x) => x.decision.id === d.id)).map((c) => c.issue),
   }));
+});
+
+async function pageCandidates(pageId) {
+  const [page, existing] = await Promise.all([getPage(pageId), listDecisions()]);
+  const adf = JSON.parse(page.body?.atlas_doc_format?.value || '{"content":[]}');
+  const tracked = new Set(existing.filter((d) => d.sourceKey?.startsWith(NOTES_PREFIX(pageId))).map((d) => d.sourceKey));
+  const candidates = findDecisionCandidates(adf, { existing: existing.filter((d) => d.status === 'active') }).map((c) => {
+    if (c.duplicateOf || !tracked.has(`${NOTES_PREFIX(pageId)}${c.key}`)) return c;
+    return { ...c, duplicateOf: existing.find((d) => d.sourceKey === `${NOTES_PREFIX(pageId)}${c.key}`)?.id || 'tracked' };
+  });
+  return { page, candidates };
+}
+
+resolver.define('findPageDecisions', async ({ context }) => {
+  const pageId = context.extension?.content?.id;
+  if (!pageId) return { candidates: [] };
+  const { page, candidates } = await pageCandidates(pageId);
+  return { page: { id: String(page.id), title: page.title }, candidates };
+});
+
+resolver.define('recordPageDecisions', async ({ payload, context }) => {
+  const pageId = context.extension?.content?.id;
+  if (!pageId) return { recorded: [] };
+  // only statements Precedent itself found on this page can be recorded from here
+  const { page, candidates } = await pageCandidates(pageId);
+  const wanted = new Set((payload.items || []).map((i) => i.key));
+  const base = await siteUrl();
+  const recorded = [];
+  for (const c of candidates.filter((x) => wanted.has(x.key) && !x.duplicateOf)) {
+    // eslint-disable-next-line no-await-in-loop
+    const d = await createDecision({
+      title: c.title,
+      statement: c.statement,
+      owner: c.ownerName ? { name: c.ownerName, accountId: c.ownerAccountId || undefined } : null,
+      decidedAt: dateFromTitle(page.title) || page.createdAt,
+      createdBy: context.accountId,
+      sourceKey: `${NOTES_PREFIX(pageId)}${c.key}`,
+      source: { type: 'confluence', label: 'Confluence', kind: 'Found in meeting notes', title: page.title, url: pageUrl(page, base), pageId: String(page.id), heading: c.heading || undefined },
+      history: [{ at: new Date().toISOString(), what: `Found in meeting notes (${c.reason}) and confirmed`, by: context.accountId }],
+    });
+    recorded.push(d);
+  }
+  if (recorded.length) await enqueueRecheck();
+  return { recorded };
 });
 
 export const handler = resolver.getDefinitions();
@@ -192,8 +373,7 @@ export async function issueContextStatus(payload) {
 
 /** Byline title on Confluence pages that contain decisions ("3 decisions · 1 conflict"). */
 export async function bylineProperties(payload) {
-  const pageId = payload?.extension?.content?.id;
-  const decisions = pageId ? await decisionsFromSourcePrefix(`confluence:${pageId}:`) : [];
+  const decisions = await pageDecisions(payload?.extension?.content?.id);
   if (!decisions.length) return { title: 'Precedent' };
   const checks = await listChecks();
   const ids = new Set(decisions.map((d) => d.id));

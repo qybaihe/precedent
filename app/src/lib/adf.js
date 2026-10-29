@@ -35,7 +35,7 @@ export function adfToText(node) {
   }
 }
 
-function collect(node, type, out = []) {
+export function collect(node, type, out = []) {
   if (!node) return out;
   if (Array.isArray(node)) {
     node.forEach((n) => collect(n, type, out));

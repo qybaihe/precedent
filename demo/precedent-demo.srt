@@ -1,0 +1,288 @@
+1
+00:00:00,400 --> 00:00:03,110
+Every team has had this moment: wait,
+
+2
+00:00:03,150 --> 00:00:05,640
+didn't we already decide not to do that?
+
+3
+00:00:05,680 --> 00:00:07,870
+Decisions live in meeting notes
+
+4
+00:00:07,910 --> 00:00:09,120
+and decision pages.
+
+5
+00:00:09,160 --> 00:00:11,350
+Months later, new work, or an AI
+
+6
+00:00:11,390 --> 00:00:14,520
+coding agent, quietly undoes them.
+
+7
+00:00:14,560 --> 00:00:15,920
+Precedent gives your team,
+
+8
+00:00:15,960 --> 00:00:17,350
+and your agents, a memory
+
+9
+00:00:17,390 --> 00:00:20,072
+of what has already been decided.
+
+10
+00:00:20,112 --> 00:00:21,872
+There is no new process.
+
+11
+00:00:21,912 --> 00:00:24,052
+Teams keep typing /decision in their
+
+12
+00:00:24,092 --> 00:00:26,442
+meeting notes and decision pages, or
+
+13
+00:00:26,482 --> 00:00:28,072
+start a Jira comment with "Decision:".
+
+14
+00:00:28,112 --> 00:00:30,272
+Precedent captures every decision,
+
+15
+00:00:30,312 --> 00:00:32,192
+with its owner, date, rationale
+
+16
+00:00:32,232 --> 00:00:34,872
+and source, and shows right on the page
+
+17
+00:00:34,912 --> 00:00:36,702
+which Jira work contradicts it.
+
+18
+00:00:37,723 --> 00:00:39,403
+Here is a new work item:
+
+19
+00:00:39,443 --> 00:00:42,363
+move the payout ledger to MongoDB.
+
+20
+00:00:42,403 --> 00:00:43,393
+Precedent checked it
+
+21
+00:00:43,433 --> 00:00:44,663
+the moment it was written.
+
+22
+00:00:44,703 --> 00:00:46,963
+It contradicts DEC-1:
+
+23
+00:00:47,003 --> 00:00:48,133
+keep all transactional
+
+24
+00:00:48,173 --> 00:00:50,123
+payment data in PostgreSQL.
+
+25
+00:00:50,163 --> 00:00:52,003
+It shows the exact sentence
+
+26
+00:00:52,043 --> 00:00:53,243
+that tripped the guardrail,
+
+27
+00:00:53,283 --> 00:00:55,993
+who decided, when, and where.
+
+28
+00:00:56,033 --> 00:00:57,713
+It works live.
+
+29
+00:00:57,753 --> 00:00:59,553
+Here is a brand-new work item:
+
+30
+00:00:59,593 --> 00:01:02,113
+integrate Adyen for EU card payments.
+
+31
+00:01:02,153 --> 00:01:03,813
+The moment it is created,
+
+32
+00:01:03,853 --> 00:01:04,993
+Precedent flags it against
+
+33
+00:01:05,033 --> 00:01:07,173
+the decision to standardize on Stripe,
+
+34
+00:01:07,213 --> 00:01:08,433
+owned by Dana Kim.
+
+35
+00:01:08,473 --> 00:01:10,533
+And it understands direction:
+
+36
+00:01:10,573 --> 00:01:12,403
+removing MongoDB from the refunds
+
+37
+00:01:12,443 --> 00:01:13,543
+service is aligned
+
+38
+00:01:13,583 --> 00:01:15,943
+with the decision, not a conflict.
+
+39
+00:01:16,542 --> 00:01:17,762
+Ask Precedent hands
+
+40
+00:01:17,802 --> 00:01:20,062
+the context to the Rovo agent.
+
+41
+00:01:20,102 --> 00:01:22,282
+It explains why the decision was made,
+
+42
+00:01:22,322 --> 00:01:24,242
+who to talk to, and the options:
+
+43
+00:01:24,282 --> 00:01:26,942
+comply, log an exception with a reason,
+
+44
+00:01:26,982 --> 00:01:28,902
+or supersede the decision.
+
+45
+00:01:28,942 --> 00:01:30,952
+Every answer cites the decision
+
+46
+00:01:30,992 --> 00:01:32,012
+and its source.
+
+47
+00:01:36,976 --> 00:01:39,146
+Leads get a Decision Radar for every
+
+48
+00:01:39,186 --> 00:01:40,816
+project: the open conflicts,
+
+49
+00:01:40,856 --> 00:01:42,776
+the evidence, and who is affected.
+
+50
+00:01:42,816 --> 00:01:44,656
+And every result is indexed,
+
+51
+00:01:44,696 --> 00:01:47,476
+so precedentConflicts > 0 works in JQL,
+
+52
+00:01:47,516 --> 00:01:49,566
+filters and dashboards.
+
+53
+00:01:51,916 --> 00:01:53,476
+Precedent also exposes
+
+54
+00:01:53,516 --> 00:01:56,166
+the same actions as MCP tools.
+
+55
+00:01:56,206 --> 00:01:57,856
+Any team can add them to its own
+
+56
+00:01:57,896 --> 00:01:59,586
+agents in Rovo Studio.
+
+57
+00:01:59,626 --> 00:02:01,576
+Here, a custom Architecture Guard
+
+58
+00:02:01,616 --> 00:02:03,126
+agent checks a planned change,
+
+59
+00:02:03,166 --> 00:02:04,646
+finds the decision it would break,
+
+60
+00:02:04,686 --> 00:02:07,366
+and proposes a compliant design instead.
+
+61
+00:02:07,406 --> 00:02:08,926
+An open-source skill file brings
+
+62
+00:02:08,966 --> 00:02:11,076
+the same check to coding agents.
+
+63
+00:02:17,411 --> 00:02:19,631
+Everything lives in one decision log,
+
+64
+00:02:19,671 --> 00:02:21,161
+in Confluence and Jira,
+
+65
+00:02:21,201 --> 00:02:22,931
+with editable guardrails, history,
+
+66
+00:02:22,971 --> 00:02:24,851
+exceptions and supersession,
+
+67
+00:02:24,891 --> 00:02:26,771
+plus one-click sample content,
+
+68
+00:02:26,811 --> 00:02:29,641
+so a new team sees value in a minute.
+
+69
+00:02:30,734 --> 00:02:33,234
+Precedent. One Forge app across Jira,
+
+70
+00:02:33,274 --> 00:02:35,534
+Confluence, Rovo and MCP,
+
+71
+00:02:35,574 --> 00:02:37,644
+so your team, and your agents,
+
+72
+00:02:37,684 --> 00:02:39,684
+know what has already been decided.
+

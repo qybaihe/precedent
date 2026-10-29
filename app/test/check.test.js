@@ -133,3 +133,9 @@ test('generic words alone do not make work "related" to a decision', () => {
   const r2 = checkWork({ text: 'Speed up payout reports with a PostgreSQL index on the transactional tables' }, decisions);
   assert.ok(r2.related.some((x) => x.decision.id === 'DEC-1'));
 });
+
+test('a brand name that stems like a removal verb ("Stripe" -> "strip") does not hide a conflict', () => {
+  const r = checkWork({ text: 'Run Stripe and Adyen side by side for EU card payments', projectKey: 'PAY' }, decisions);
+  assert.equal(r.status, 'conflict');
+  assert.equal(r.conflicts[0].decision.id, 'DEC-7');
+});

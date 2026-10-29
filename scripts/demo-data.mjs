@@ -122,6 +122,25 @@ export const PAGES = [
     ),
   },
   {
+    // decisions in prose, no /decision items: found with the byline's "Find decisions on this page"
+    title: 'Payments Sync — 2026-10-27',
+    labels: ['payments', 'meeting-notes'],
+    adf: doc(
+      p(strong('Attendees: '), 'Priya Shah, Marco Rossi, Dana Kim, Sam Lee'),
+      h(2, 'Discussion'),
+      p('Marco walked through the two settlement-file incidents from September. After some back and forth we agreed that refund webhooks are retried for 72 hours before they move to the dead-letter queue.'),
+      p('Maybe we should consider GraphQL for the partner API? Parked until Q1.'),
+      p('Dana confirmed the EU card rollout is on track for December.'),
+      h(2, 'Decisions'),
+      bullets(
+        'All new payment services publish domain events through Kafka instead of direct HTTP callbacks — decided by Marco Rossi',
+        'Going forward, settlement reports are generated in the data warehouse, not in the payments database.',
+      ),
+      h(2, 'Action items'),
+      task('Marco to draft the Kafka topic naming guide'),
+    ),
+  },
+  {
     title: 'Payments Onboarding Guide',
     labels: ['onboarding', 'payments'],
     adf: doc(
@@ -140,6 +159,7 @@ export const ISSUES = [
   { project: 'PAY', summary: 'Store payout ledger in MongoDB for flexible schemas', description: 'The payout ledger schema changes every sprint. Move the ledger to MongoDB so we can iterate without writing migrations.\n\nAcceptance: ledger writes and reads go through the new Mongo collection.', labels: ['payments', 'ledger'], status: 'In Progress' },
   { project: 'PAY', summary: 'Give partner banks direct access to the ledger service', description: 'Expose the ledger service directly to partner banks so they can pull settlement files without waiting on the gateway team.', labels: ['partners'], comment: 'Synced with Security and the partner team.\n\nDecision: partner settlement files are delivered via SFTP drop, never by giving partners database credentials.' },
   { project: 'PAY', summary: 'Evaluate Adyen as a second card processor for EU merchants', description: 'Some EU merchants asked for Adyen. Spike: integrate Adyen for card payments behind the processor interface and compare fees.', labels: ['payments', 'eu'] },
+  { project: 'PAY', summary: 'Notify the ledger of settled refunds with direct HTTP callbacks', description: 'When a refund settles, the refunds service calls the ledger service with direct HTTP callbacks so merchant balances update immediately.', labels: ['payments', 'refunds'] },
   { project: 'PAY', summary: 'Remove MongoDB from the refunds service', description: 'Migrate the remaining refund records from MongoDB to the payments PostgreSQL cluster and drop the Mongo dependency.', labels: ['payments', 'tech-debt'], status: 'In Progress' },
   { project: 'PAY', summary: 'Speed up payout reports with a PostgreSQL index', description: 'Payout reports for large merchants take 40s. Add a composite index on the payments transactional tables in PostgreSQL.', labels: ['payments', 'performance'] },
   { project: 'PAY', summary: 'Retry webhook deliveries with exponential backoff', description: 'Merchants miss webhooks during short outages. Retry failed deliveries up to 8 times with exponential backoff and jitter.', labels: ['webhooks'], status: 'Done' },

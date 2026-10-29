@@ -6,7 +6,7 @@ import { extractDecisionItems, parseDecisionTemplate, extractCommentDecision, ti
 import { getPage, getPageLabels, getSpace, siteUrl, getIssue, getComment, issueMeta } from './products.js';
 import { upsertFromSource, decisionsFromSourcePrefix, saveDecision } from './store.js';
 
-function pageUrl(page, base) {
+export function pageUrl(page, base) {
   const webui = page._links?.webui || `/spaces/${page.spaceId}/pages/${page.id}`;
   const wikiBase = page._links?.base || `${base}/wiki`;
   return `${wikiBase}${webui}`;

@@ -8,6 +8,7 @@ import { bm25, buildIndex } from './lib/check.js';
 import { listDecisions, getDecision, createDecision, saveDecision, listChecks, getCheck, saveCheck } from './lib/store.js';
 import { siteUrl } from './lib/products.js';
 import { snippet } from './lib/text.js';
+import { suggestFix } from './lib/fix.js';
 
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 
@@ -54,11 +55,12 @@ function describeCheck(r) {
       matchedGuardrail: c.terms?.join(', ') || c.term,
       evidence: c.evidence,
       alreadyReviewed: Boolean(c.acknowledged),
+      compliantAlternative: c.fix ? { advice: c.fix.advice, use: c.fix.to || null, insteadOf: c.fix.from || null } : null,
     })),
     aligned: r.aligned.map((a) => ({ decision: brief(a.decision), why: a.reason })),
     related: r.related.map((x) => ({ decision: brief(x.decision), sharedTopics: x.overlap })),
     guidance:
-      'Cite decision ids and source links. If the work must go ahead anyway, suggest either logging an exception (log-exception) or superseding the decision (supersede-decision) with the owner involved.',
+      'Cite decision ids and source links. Lead with the compliant alternative when one is given. If the work must go ahead anyway, suggest either logging an exception (log-exception) or superseding the decision (supersede-decision) with the owner involved.',
   };
 }
 
@@ -105,7 +107,14 @@ export async function checkWorkItem(payload) {
   }
   const text = String(payload.plan || payload.text || '').trim();
   if (!text) return { error: 'Provide either issueKey or plan (a description of the intended change).' };
-  const r = checkWork({ text, projectKey: payload.projectKey }, await listDecisions());
+  const decisions = await listDecisions();
+  const r = checkWork({ text, projectKey: payload.projectKey }, decisions);
+  // a coding agent's plan gets the same compliant alternative a work item would
+  for (const c of r.conflicts) {
+    const d = decisions.find((x) => x.id === c.decision.id);
+    const f = d ? suggestFix({ summary: text, description: '' }, c, d) : null;
+    if (f) c.fix = { kind: f.kind, from: f.from, to: f.to, advice: f.advice };
+  }
   return { plan: snippet(text, 200), ...describeCheck(r) };
 }
 

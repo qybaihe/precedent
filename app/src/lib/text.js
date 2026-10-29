@@ -15,7 +15,7 @@ export const STOPWORDS = new Set(
 );
 
 // Spelling variants that should be treated as the same concept.
-const ALIASES = {
+export const ALIASES = {
   postgresql: 'postgres',
   psql: 'postgres',
   pg: 'postgres',
@@ -55,8 +55,15 @@ const PHRASE_ALIASES = Object.entries(ALIASES)
  * "logging"/"logged"/"log". Both sides of every comparison go through it, so consistency
  * matters more than linguistic accuracy.
  */
+// Product names whose stem would collide with a verb ("Stripe" -> "strip", a removal cue).
+const KEEP_WHOLE = new Map([
+  ['stripe', 'stripe'],
+  ['stripes', 'stripe'],
+]);
+
 export function stem(word) {
   let w = word;
+  if (KEEP_WHOLE.has(w)) return KEEP_WHOLE.get(w);
   if (w.length <= 3 || /\d/.test(w)) return w;
   if (w.endsWith('ies') && w.length > 4) w = w.slice(0, -3) + 'y';
   else if (w.endsWith('sses')) w = w.slice(0, -2);

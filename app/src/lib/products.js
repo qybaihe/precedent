@@ -83,6 +83,15 @@ export async function addComment(issueKey, adfBody) {
   );
 }
 
+export async function updateIssue(key, fields) {
+  const res = await api.asApp().requestJira(route`/rest/api/3/issue/${key}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  });
+  if (!res.ok) await json(res, `update ${key}`);
+}
+
 /** Enhanced JQL search (POST /search/jql). Returns up to `max` issues. */
 export async function searchIssues(jql, { max = 50, fields = ISSUE_FIELDS.split(',') } = {}) {
   const issues = [];
@@ -144,6 +153,13 @@ export async function userCanBrowse(issueKey) {
   return Boolean(data.permissions?.BROWSE_PROJECTS?.havePermission);
 }
 
+export async function userCanEdit(issueKey) {
+  const res = await api.asUser().requestJira(route`/rest/api/3/mypermissions?issueKey=${issueKey}&permissions=EDIT_ISSUES`);
+  if (!res.ok) return false;
+  const data = await res.json();
+  return Boolean(data.permissions?.EDIT_ISSUES?.havePermission);
+}
+
 // ---------- Confluence ----------
 
 export async function getPage(id) {
@@ -194,5 +210,17 @@ export async function createPage({ spaceId, title, adf }) {
       }),
     }),
     'create page',
+  );
+}
+
+/** Footer comment on a page (v2; the v1 content endpoint for comments is gone). */
+export async function addPageComment(pageId, storageHtml) {
+  return json(
+    await api.asApp().requestConfluence(route`/wiki/api/v2/footer-comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageId: String(pageId), body: { representation: 'storage', value: storageHtml } }),
+    }),
+    'add page comment',
   );
 }

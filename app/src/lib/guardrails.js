@@ -32,14 +32,14 @@ const LEADING_FILLER = new Set(
   'any other new additional the a an our more extra separate own another further yet any_other also even ever'.split(' '),
 );
 // Acronyms that are too generic to be decisive on their own.
-const GENERIC_ACRONYMS = new Set(
+export const GENERIC_ACRONYMS = new Set(
   'API APIS UI UX URL URLS HTTP HTTPS SDK DB ID IDS QA PR PRS CI CD SLA SLAS MVP OK IT HR US EU UK Q1 Q2 Q3 Q4 TBD FYI'.split(' '),
 );
 
 const MAX_OBJECT_WORDS = 6;
 
 /** Grab the object phrase that starts at `rest` (text right after a cue). */
-function takeObject(rest) {
+export function takeObject(rest) {
   const words = rest.split(/\s+/);
   // "never by giving partners credentials" -> skip the leading "by"
   while (words.length && BOUNDARY_WORDS.has(words[0].toLowerCase())) words.shift();
@@ -58,7 +58,7 @@ function takeObject(rest) {
 }
 
 /** "MongoDB or other document stores" -> ["MongoDB", "document stores"] */
-function splitAlternatives(phrase) {
+export function splitAlternatives(phrase) {
   return phrase
     .split(/\s*(?:,|\/|\bor\b|\band\b|\bnor\b|&)\s*/i)
     .map((p) =>
@@ -191,6 +191,10 @@ export function extractGuardrails(text) {
         splitAlternatives(takeObject(pref[1])).forEach((p) => addTerm(prefer, makeTerm(p)));
       }
     }
+
+    // 7. The winner of an "instead of": "publish events through Kafka instead of HTTP callbacks".
+    const winner = sentence.match(/\b(?:through|via|using|with|on|to|in)\s+((?:[\w.+#-]+\s+){0,3}?[\w.+#-]+)\s*,?\s+(?:instead of|rather than|in place of)\b/i);
+    if (winner) splitAlternatives(takeObject(winner[1])).forEach((p) => addTerm(prefer, makeTerm(p)));
   }
 
   // A term can't be both preferred and avoided; avoid wins only if it never appears as preferred.

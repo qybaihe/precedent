@@ -21,3 +21,7 @@ demo/*.aiff
 demo/frames/
 demo/narration/*.wav
 tools/probe-login.mjs
+# Custom UI build output (npm run build:ui)
+app/static/ui/
+app/ui/node_modules/
+COMPETITORS.md

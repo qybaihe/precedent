@@ -3,6 +3,8 @@
 
 import { Queue } from '@forge/events';
 import { checkWork } from './check.js';
+import { suggestFix } from './fix.js';
+import { adfToText } from './adf.js';
 import { getIssue, issueText, issueMeta, setIssueProperty, siteUrl, searchIssues } from './products.js';
 import { listDecisions, getCheck, saveCheck, listChecks, deleteCheck } from './store.js';
 
@@ -20,6 +22,28 @@ function propertyFor(result) {
   };
 }
 
+/**
+ * Compliant alternatives for each conflict. The stored check keeps a slim version (for the Radar,
+ * Rovo and MCP); the full rewrite preview is only returned to the issue panel.
+ */
+function attachFixes(result, issue, decisions) {
+  const work = { summary: issue.fields?.summary || '', description: adfToText(issue.fields?.description).trim() };
+  const fixes = {};
+  for (const c of result.conflicts) {
+    const d = decisions.find((x) => x.id === c.decision.id);
+    if (!d) continue;
+    try {
+      const f = suggestFix(work, c, d);
+      if (!f) continue;
+      fixes[d.id] = f;
+      c.fix = { kind: f.kind, from: f.from, to: f.to, advice: f.advice };
+    } catch (e) {
+      console.warn(`fix for ${issue.key} / ${d.id} failed: ${e.message}`);
+    }
+  }
+  return fixes;
+}
+
 /** Check one issue (by key, or an already-fetched issue object) and persist the result. */
 export async function checkIssue(issueOrKey, { decisions, base } = {}) {
   const issue = typeof issueOrKey === 'string' ? await getIssue(issueOrKey) : issueOrKey;
@@ -31,6 +55,7 @@ export async function checkIssue(issueOrKey, { decisions, base } = {}) {
     all,
     { acknowledged },
   );
+  const fixes = attachFixes(result, issue, all);
   const record = { ...result, issue: meta, acknowledged };
   await saveCheck(issue.key, record);
   const prop = propertyFor(result);
@@ -38,7 +63,7 @@ export async function checkIssue(issueOrKey, { decisions, base } = {}) {
   if (!prevProp || prevProp.status !== prop.status || prevProp.decisions !== prop.decisions || prevProp.conflictCount !== prop.conflictCount) {
     await setIssueProperty(issue.key, prop);
   }
-  return record;
+  return { ...record, fixes };
 }
 
 /** Re-check many issues: everything checked before plus anything matching `jql`. */

@@ -6,6 +6,7 @@ Inputs
   demo/narration/NN.wav         written by demo/make-narration.py
 Output
   demo/precedent-demo.mp4       1920x1080 (recorded natively, browser zoom 120 %), H.264 + AAC
+  demo/tmp/timeline.json        scene and narration start times in the final video (for subtitles.py)
 
 Each scene clip starts when its page was ready, lasts max(recorded length, narration + padding),
 and gets its narration starting 0.4 s in. Scenes are joined with short crossfades.
@@ -59,14 +60,20 @@ for s in scenes:
         '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
         str(out),
     ])
-    parts.append((out, length))
+    parts.append((out, length, n))
     print(f'scene {n}: {length:.1f}s (recorded {recorded:.1f}s, narration {narr:.1f}s)')
 
 # join with 0.35 s crossfades
 XF = 0.35
 inputs, filters = [], []
-for i, (p, _) in enumerate(parts):
+for i, (p, _, _) in enumerate(parts):
     inputs += ['-i', str(p)]
+# where each scene (and its narration) lands in the final video, for demo/subtitles.py
+timeline, t = [], 0.0
+for p, length, n in parts:
+    timeline.append({'scene': n, 'start': round(t, 3), 'narration': round(t + LEAD, 3), 'length': round(length, 3)})
+    t += length - XF
+(TMP / 'timeline.json').write_text(json.dumps(timeline, indent=1))
 v_prev, a_prev, offset = '0:v', '0:a', parts[0][1] - XF
 for i in range(1, len(parts)):
     v_out, a_out = f'v{i}', f'a{i}'

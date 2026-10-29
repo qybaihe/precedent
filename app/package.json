@@ -6,7 +6,10 @@
   "private": true,
   "scripts": {
     "lint": "eslint src/**/*",
-    "test": "node --test test/"
+    "test": "node --test test/*.test.js",
+    "build:ui": "npm --prefix ui ci --no-audit --no-fund && npm --prefix ui run build",
+    "deploy": "npm --prefix ui run build && forge deploy",
+    "fixtures": "node -e \"const fs=require('fs');const s=fs.readFileSync('src/sample.js','utf8');fs.writeFileSync('test/fixtures.js','// Generated from src/sample.js (pure data part) for unit tests. Regenerate: npm run fixtures\\n'+s.slice(s.indexOf('const text = '),s.indexOf('/** Create sample content')).trimEnd()+'\\n')\""
   },
   "devDependencies": {
     "eslint": "^8.56.0",
@@ -17,8 +20,6 @@
     "@forge/bridge": "^7.2.1",
     "@forge/events": "^3.0.9",
     "@forge/kvs": "^2.1.1",
-    "@forge/react": "^12.4.0",
-    "@forge/resolver": "^2.0.2",
-    "react": "^18.2.0"
+    "@forge/resolver": "^2.0.2"
   }
 }

@@ -14,27 +14,24 @@ modules:
   # ---------------- Jira ----------------
   jira:issueContext:
     - key: precedent-issue-context
-      resource: issue-context
+      resource: ui
       resolver:
         function: resolver
-      render: native
       title: Precedent
       label: Decisions
       dynamicProperties:
         function: issue-context-status
   jira:projectPage:
     - key: precedent-radar
-      resource: radar
+      resource: ui
       resolver:
         function: resolver
-      render: native
       title: Decision Radar
   jira:globalPage:
     - key: precedent-jira-log
-      resource: log
+      resource: ui
       resolver:
         function: resolver
-      render: native
       title: Precedent — Decision Log
       icon: resource:icons;precedent.svg
   jira:entityProperty:
@@ -55,19 +52,17 @@ modules:
   # ---------------- Confluence ----------------
   confluence:globalPage:
     - key: precedent-confluence-log
-      resource: log
+      resource: ui
       resolver:
         function: resolver
-      render: native
       title: Precedent — Decision Log
       icon: resource:icons;precedent.svg
       route: decision-log
   confluence:contentBylineItem:
     - key: precedent-byline
-      resource: byline
+      resource: ui
       resolver:
         function: resolver
-      render: native
       title: Precedent
       icon: resource:icons;precedent.svg
       tooltip: Decisions on this page tracked by Precedent
@@ -344,14 +339,9 @@ modules:
       handler: index.listConflicts
 
 resources:
-  - key: issue-context
-    path: src/frontend/issue-context.jsx
-  - key: radar
-    path: src/frontend/radar.jsx
-  - key: log
-    path: src/frontend/log.jsx
-  - key: byline
-    path: src/frontend/byline.jsx
+  # Custom UI bundle for every surface (built from ui/ with `npm run build:ui`)
+  - key: ui
+    path: static/ui
   - key: agent-prompt
     path: prompts
   - key: icons
@@ -370,5 +360,6 @@ permissions:
     - write:confluence-content
     - read:page:confluence
     - write:page:confluence
+    - write:comment:confluence
     - read:space:confluence
     - read:label:confluence

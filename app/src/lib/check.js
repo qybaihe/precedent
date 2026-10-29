@@ -114,8 +114,8 @@ const EXPANSIONS = {
   trac: ['opentelemetry', 'apm'],
   ci: ['jenkin', 'pipelin'],
   mobil: ['reactnative', 'flutter'],
-  card: ['strip', 'adyen'],
-  processor: ['strip', 'adyen'],
+  card: ['stripe', 'adyen'],
+  processor: ['stripe', 'adyen'],
 };
 
 export function buildIndex(decisions) {
