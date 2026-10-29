@@ -55,4 +55,8 @@ Use it so you never quietly implement something the team already ruled out.
 claude mcp add --transport http precedent https://mcp.atlassian.com/forge/92a37583-d5ab-4554-97dd-8e6d41617e28
 # 3. In Claude Code run /mcp, authenticate, pick your site.
 # 4. Copy this folder to ~/.claude/skills/precedent/ (or your project's .claude/skills/).
+#
+# External MCP access is in Preview. If tools/list returns "An admin must enable external MCP
+# access for this app" although step 1 is done, the site doesn't allow it yet; Rovo Studio agents
+# can use the same tools meanwhile (Add tools → Connected apps → Precedent).
 ```

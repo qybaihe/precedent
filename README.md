@@ -58,7 +58,7 @@ flowchart LR
    - pick a space and a project and click **Create sample content** (creates two pages and seven work items so you can see conflicts within a minute).
 3. Open any Jira work item and expand **Precedent** in the right-hand panel.
 4. Rovo: open Rovo chat → Browse agents → **Precedent**.
-5. MCP (optional): an org admin enables the tools in admin.atlassian.com → Apps → Sites → *site* → Connected apps → Precedent → TOOLS → *Expose tools to MCP-compatible apps* → Enable tools; then `claude mcp add --transport http precedent https://mcp.atlassian.com/forge/92a37583-d5ab-4554-97dd-8e6d41617e28`.
+5. MCP (optional): an org admin enables the tools in admin.atlassian.com → Apps → Sites → *site* → Connected apps → Precedent → TOOLS → *Expose tools to MCP-compatible apps* → Enable tools; then `claude mcp add --transport http precedent https://mcp.atlassian.com/forge/92a37583-d5ab-4554-97dd-8e6d41617e28`. External MCP access is in Preview: on our test sites the endpoint authenticated but still refused `tools/list` ("An admin must enable external MCP access for this app") with the toggle on. In Rovo Studio the same tools work today (*Agents → Create agent → Add tools → Connected apps → Precedent*).
 
 ## Development
 

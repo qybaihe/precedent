@@ -27,6 +27,10 @@ const DURATIONS = Object.fromEntries(
 // Native 1920x1080 frames with the browser zoomed to 120% (lays out like 1600x900, so UI text stays
 // large and crisp). Playwright's recorder captures CSS pixels, so deviceScaleFactor would not help.
 const VIEW = { width: 1920, height: 1080 };
+// Rovo Studio on the demo site: the tool catalog and a customer-built agent ("Architecture Guard") that
+// uses Precedent's rovo:mcp tools.
+const STUDIO = 'https://studio.atlassian.com/w/71f49200-63ca-4877-9290-ce077e70c86e/spaces/9099cc47-0671-45ca-a639-4ca88b824934/s/bd3ab69c-fcd4-42ee-bf1a-34f263587814';
+const STUDIO_AGENT = `${STUDIO}/agents/ari%3Acloud%3Arovo%3A%3Aagent%2Factivation%2Fa01cb219-2373-4457-91eb-08ba499cdd7d%2Fade417d9-a5fe-424c-9080-17dad78bf232/v/draft/details`;
 const ZOOM_LEVEL = 1.0; // Chrome zoom level = log1.2(factor): 1.0 -> 120 %
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -277,13 +281,54 @@ const SCENES = {
     await sleep(4500);
   },
 
-  // Replay of a real `claude -p` session against the Precedent MCP server (demo/cards/transcript.js,
-  // produced by demo/mcp-session.sh from Claude Code's stream-json output).
-  7: async (page, ready) => {
-    await page.goto(`file://${path.join(HERE, 'cards', 'terminal.html')}`);
+  // Precedent's rovo:mcp tools in Rovo Studio, used by a customer-built agent.
+  // SCENE7=terminal instead replays a real `claude -p` session against the external MCP endpoint
+  // (demo/cards/transcript.js from demo/mcp-session.sh).
+  7: async (page, ready, cut) => {
+    if (process.env.SCENE7 === 'terminal') {
+      await page.goto(`file://${path.join(HERE, 'cards', 'terminal.html')}`);
+      ready();
+      await page.waitForFunction(() => document.title === 'DONE', null, { timeout: 120000 });
+      await sleep(2500);
+      return;
+    }
+    await page.goto(`${STUDIO}/tools`, { waitUntil: 'domcontentloaded' });
+    await page.getByText(/^Connected apps$/).first().waitFor({ timeout: 40000 });
+    await tidy(page);
+    await fitWindow(page);
+    const precedentFilter = page.locator('span:visible', { hasText: /^Precedent$/ }).last();
+    await precedentFilter.click();
+    await page.getByRole('button', { name: /^Select Check work against decisions$/ }).first().waitFor({ timeout: 20000 });
+    await sleep(800);
     ready();
-    await page.waitForFunction(() => document.title === 'DONE', null, { timeout: 120000 });
-    await sleep(2500);
+    await hoverOn(page, page.getByText(/^Check work against decisions$/).last(), 1800);
+    await hoverOn(page, page.getByText(/^Record a decision$/).last(), 1000);
+    cut.start();
+    await page.goto(STUDIO_AGENT, { waitUntil: 'domcontentloaded' });
+    await page.getByText(/^Instructions$/).first().waitFor({ timeout: 40000 });
+    await page.locator('button[aria-label="Close"]:visible').first().click({ timeout: 3000 }).catch(() => {}); // what's-new banner
+    await tidy(page);
+    await sleep(1000);
+    cut.end();
+    await hoverOn(page, page.getByText(/^Tools$/).last(), 1200);
+    await clickOn(page, page.getByRole('button', { name: /^Test$/ }));
+    const composer = page.locator('[aria-label="Describe what you want to know or do next"]').last();
+    await composer.waitFor({ timeout: 30000 });
+    await sleep(600);
+    await composer.click();
+    await page.keyboard.type('I am about to move the payout ledger to a MongoDB collection so the schema can evolve without migrations. Check our team decisions first.', { delay: 18 });
+    await sleep(400);
+    await page.keyboard.press('Enter');
+    await sleep(1500);
+    cut.start(); // agent thinking
+    await page.getByText(/conflicts? with|Stop/).last().waitFor({ timeout: 90000 }).catch(() => {});
+    await sleep(300);
+    cut.end();
+    await page.getByText(/JSONB/).last().waitFor({ timeout: 60000 }).catch(() => {});
+    await sleep(1500);
+    await moveTo(page, 1400, 500);
+    await smoothScroll(page, 500, { step: 50, pause: 140 });
+    await sleep(3000);
   },
 
   8: async (page, ready) => {
@@ -322,7 +367,7 @@ const index = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, '
 
 // Card/terminal scenes are local files: record them with a throwaway profile so they don't need (or
 // lock) the logged-in one. Headless by default (independent of the screen size); HEADED=1 to watch.
-const LOCAL_SCENES = new Set([1, 7, 9]);
+const LOCAL_SCENES = new Set(process.env.SCENE7 === 'terminal' ? [1, 7, 9] : [1, 9]);
 const profile = order.every((n) => LOCAL_SCENES.has(n)) ? path.join(TMP, 'card-profile') : path.join(ROOT, '.browser-profile');
 const prefsFile = path.join(profile, 'Default', 'Preferences');
 fs.mkdirSync(path.dirname(prefsFile), { recursive: true });
@@ -380,7 +425,7 @@ for (const n of order) {
     console.log(`scene ${n}: ready at ${(readyMs / 1000).toFixed(1)}s, clip ${((endMs - readyMs - cutMs()) / 1000).toFixed(1)}s after ${cuts.length} cut(s) (needs ${(minMs / 1000).toFixed(1)}s)`);
   } catch (e) {
     await page.screenshot({ path: path.join(TMP, `scene${n}-error.png`) }).catch(() => {});
-    console.error(`scene ${n} FAILED: ${e.message.split('\n')[0]}`);
+    console.error(`scene ${n} FAILED at ${page.url().slice(0, 100)}: ${e.message.split('\n')[0]}`);
     await page.close().catch(() => {});
   }
 }

@@ -3,8 +3,12 @@
 Recorded on the live site `https://qybaihe-forge.atlassian.net` (production install of Precedent, demo org "Lumen Pay")
 by `node demo/record.mjs` (Playwright, logged-in `.browser-profile`, headless): native **1920×1080** frames with the
 browser zoomed to **120 %** (the UI lays out like a 1600×900 screen, so text stays large and sharp), light theme, an
-injected visible cursor with click ripples. Voice-over: macOS `say -v Samantha -r 178`, generated per scene from the
-**Narration** table below (`python3 demo/make-narration.py` → `demo/narration/NN.wav`; durations in `durations.json`).
+injected visible cursor with click ripples. Voice-over: **Xiaomi MiMo-V2.5-TTS, English voice "Mia"**, generated per scene
+from the **Narration** table below with a short style instruction (`python3 demo/make-narration.py --engine mimo --voice Mia`,
+API key from `$MIMO_API_KEY`), then checked by `demo/qc-narration.py`: every take is transcribed locally with whisper.cpp and
+regenerated when it has extra words or a word error rate above 8 % (neural TTS occasionally adds an "Um" or an invented
+sentence). Offline fallback: `python3 demo/make-narration.py` (macOS `say -v Samantha -r 178`). Output: `demo/narration/NN.wav`,
+durations in `durations.json`.
 Each scene is recorded as its own clip and lasts at least as long as its narration (+1.4 s);
 `python3 demo/compose.py` trims each clip to the moment its page was ready, lays the narration over it, crossfades
 (0.35 s), normalises loudness to −16 LUFS and writes `demo/precedent-demo.mp4` (H.264/AAC, 1080p30).
@@ -22,7 +26,7 @@ screenshots to `demo/tmp/`, `HEADED=1` shows the browser. Scenes 1, 7 and 9 are 
 | 4 | It works live. Here is a brand new work item: integrate Adyen for EU card payments. The moment it is created, Precedent flags it against the decision to standardize on Stripe, owned by Dana Kim. And it understands direction: removing MongoDB from the refunds service is aligned with the decision, not a conflict. | 17 |
 | 5 | Ask Precedent hands the context to the Rovo agent. It explains why the decision was made, who to talk to, and the options: comply, log an exception with a reason, or supersede the decision. Every answer cites the decision and its source. | 16 |
 | 6 | Leads get a Decision Radar for every project: the open conflicts, the evidence, and who is affected. And every result is indexed, so precedent conflicts greater than zero works in J Q L, filters and dashboards. | 13 |
-| 7 | Because Precedent exposes the same actions through Atlassian's MCP server, AI coding agents check team decisions before they write code. Here, Claude Code calls check work item, finds D E C one, and proposes a compliant design instead. An open source skill file teaches any coding agent to do this by default. | 19 |
+| 7 | Precedent also exposes the same actions as MCP tools. Any team can add them to its own agents in Rovo Studio. Here, a custom Architecture Guard agent checks a planned change, finds the decision it would break, and proposes a compliant design instead. An open source skill file brings the same check to coding agents. | 20 |
 | 8 | Everything lives in one decision log, in Confluence and Jira, with editable guardrails, history, exceptions and supersession, plus one click sample content, so a new team sees value in a minute. | 12 |
 | 9 | Precedent. One Forge app across Jira, Confluence, Rovo and MCP, so your team, and your agents, know what has already been decided. | 9 |
 
@@ -91,17 +95,19 @@ Base URLs (production environment id `1c85a2f4-e35c-49f7-bc7a-39674f4f24b0`, app
 3. Click **Open in JQL** (or open `https://qybaihe-forge.atlassian.net/issues/?jql=precedentConflicts%20%3E%200%20ORDER%20BY%20key`).
 4. Expect the list view with the 8 conflicting work items. Hold 2 s.
 
-### Scene 7 — Claude Code over MCP (≥ 20 s)
-A real, non-interactive Claude Code session against the Precedent MCP server (`demo/mcp-session.sh` runs
-`claude -p` with the MCP bearer token from `tools/mcp-oauth.mjs`, captures stream-json, and `demo/make-transcript.py`
-turns it into `demo/cards/transcript.js`). `demo/cards/terminal.html` replays that transcript as a terminal at a readable
-pace — the tool calls, results and answer text are exactly what the session produced. Prompt:
-```
-I'm about to move the payout ledger to a MongoDB collection so the schema can evolve without migrations.
-Check our team decisions with the precedent tools first.
-```
-Expect Claude to call **precedent – check-work-item** (approve the tool call), report **conflict with DEC-1** (owner Priya Shah,
-source page), and propose a compliant design (PostgreSQL + JSONB column / migration tooling) instead of writing Mongo code.
+### Scene 7 — Precedent's MCP tools in a customer-built Rovo Studio agent (≥ 21 s)
+1. Rovo Studio → **Tools** → *Connected apps* → **Precedent**: the seven Precedent tools (Check work against decisions,
+   Get decision details, List open decision conflicts, Log a decision exception, Record a decision, Search team decisions,
+   Supersede a decision). Hover *Check work against decisions*.
+2. Open the agent **Architecture Guard** (built in Studio from blank: short instructions + three Precedent tools) → **Test**.
+3. Type: *I am about to move the payout ledger to a MongoDB collection so the schema can evolve without migrations. Check our
+   team decisions first.* → Enter (thinking time is cut).
+4. Expect: *Stop: This plan conflicts with an active team decision* — source page, owner Priya Shah, the tripped guardrail
+   *"Do not introduce MongoDB or other document stores for payments."*, rationale, and a PostgreSQL JSONB alternative.
+   Scroll the answer once.
+
+Alternative take (`SCENE7=terminal node demo/record.mjs 7`): replay of a real `claude -p` session against the external MCP
+endpoint (`demo/mcp-session.sh` → `demo/cards/transcript.js`), for when the site's external MCP exposure is live.
 
 ### Scene 8 — Decision Log (≥ 13 s)
 1. Open the Confluence **Decision Log** URL above.
