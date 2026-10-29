@@ -123,3 +123,13 @@ test('a technology the decision also prefers is not decisive on its own', () => 
   assert.equal(checkWork({ text: 'Spin up a team-owned Redis instance for search autocomplete' }, d).conflicts[0]?.decision.id, 'DEC-8');
   assert.equal(checkWork({ text: 'Build a feature flag service backed by Redis' }, d).conflicts.length, 0);
 });
+
+test('generic words alone do not make work "related" to a decision', () => {
+  // seen on a real site: an anonymization task shared only "data" and "document" with DEC-1
+  const r = checkWork({ text: 'Develop data anonymization protocols\nAnonymize personal data in every exported document.' }, decisions);
+  assert.equal(r.status, 'clear');
+  assert.deepEqual(r.related, []);
+  // …while a genuinely related item still is
+  const r2 = checkWork({ text: 'Speed up payout reports with a PostgreSQL index on the transactional tables' }, decisions);
+  assert.ok(r2.related.some((x) => x.decision.id === 'DEC-1'));
+});

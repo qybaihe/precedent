@@ -49,7 +49,8 @@ Use it so you never quietly implement something the team already ruled out.
 
 ```bash
 # 1. An Atlassian org admin enables the Precedent tools:
-#    admin.atlassian.com → Apps → Sites → <site> → Connected apps → Precedent → Tools
+#    admin.atlassian.com → Apps → Sites → <site> → Connected apps → Precedent
+#    → TOOLS → "Expose tools to MCP-compatible apps" → Enable tools
 # 2. Connect your MCP client (Claude Code shown):
 claude mcp add --transport http precedent https://mcp.atlassian.com/forge/92a37583-d5ab-4554-97dd-8e6d41617e28
 # 3. In Claude Code run /mcp, authenticate, pick your site.

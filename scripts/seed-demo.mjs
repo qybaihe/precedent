@@ -1,17 +1,21 @@
 // Seeds the demo site with a realistic engineering org ("Lumen Pay"):
 // Confluence pages that contain decisions, and Jira work items — some of which contradict them.
 // Usage: source ~/hackathons/.secrets/atlassian.env && node scripts/seed-demo.mjs [--reset]
+// PLAT_KEY=PLF uses another key for the Platform project (e.g. on a site that already has a PLAT project).
+// --reset only ever deletes projects/pages that this script created (names are checked first).
 import { call, sleep } from './lib.mjs';
 
 const ME = '712020:1a2d93dd-7154-45be-8fcc-bf5262dd2dce';
 const SPACE_KEY = 'ENG';
+const PLAT_KEY = process.env.PLAT_KEY || 'PLAT';
 const PROJECTS = [
   { key: 'PAY', name: 'Payments' },
   { key: 'CHK', name: 'Checkout' },
-  { key: 'PLAT', name: 'Platform' },
+  { key: PLAT_KEY, name: 'Platform' },
 ];
 
-import { PAGES, ISSUES } from './demo-data.mjs';
+import { PAGES, ISSUES as RAW_ISSUES } from './demo-data.mjs';
+const ISSUES = RAW_ISSUES.map((i) => (i.project === 'PLAT' ? { ...i, project: PLAT_KEY } : i));
 
 const doc = (...content) => ({ type: 'doc', version: 1, content });
 const p = (t) => ({ type: 'paragraph', content: [{ type: 'text', text: t }] });
@@ -19,6 +23,9 @@ const adfFromText = (t) => doc(...t.split('\n\n').map((para) => p(para)));
 
 async function ensureProject({ key, name }, reset) {
   const existing = await call('GET', `/rest/api/3/project/${key}`).catch(() => null);
+  if (existing && existing.name !== name) {
+    throw new Error(`project ${key} already exists as "${existing.name}" (not ours) — pick another key, e.g. PLAT_KEY=PLF`);
+  }
   if (existing && reset) {
     await call('DELETE', `/rest/api/3/project/${key}?enableUndo=false`);
     console.log(`deleted project ${key}`);
@@ -44,7 +51,14 @@ async function transition(key, target) {
 
 async function main() {
   const reset = process.argv.includes('--reset');
-  const space = await call('GET', `/wiki/rest/api/space/${SPACE_KEY}?expand=homepage`);
+  let space = await call('GET', `/wiki/rest/api/space/${SPACE_KEY}?expand=homepage`).catch(() => null);
+  if (!space) {
+    await call('POST', '/wiki/rest/api/space', { key: SPACE_KEY, name: 'Engineering', description: { plain: { value: 'Lumen Pay engineering: architecture reviews, decisions and team notes.', representation: 'plain' } } });
+    console.log(`created space ${SPACE_KEY}`);
+    space = await call('GET', `/wiki/rest/api/space/${SPACE_KEY}?expand=homepage`);
+  } else if (space.name !== 'Engineering') {
+    throw new Error(`space ${SPACE_KEY} already exists as "${space.name}" (not ours)`);
+  }
   const spaceId = String(space.id);
 
   if (reset) {

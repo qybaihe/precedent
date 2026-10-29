@@ -81,6 +81,7 @@ modules:
       events:
         - avi:jira:created:issue
         - avi:jira:updated:issue
+        - avi:jira:deleted:issue
       filter:
         ignoreSelf: true
     - key: jira-comment-trigger

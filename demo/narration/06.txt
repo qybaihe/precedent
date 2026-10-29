@@ -1,1 +1,1 @@
-Leads get a Decision Radar for every project. And every result is indexed, so precedent conflicts greater than zero works in J Q L, filters and dashboards.
+Leads get a Decision Radar for every project: the open conflicts, the evidence, and who is affected. And every result is indexed, so precedent conflicts greater than zero works in J Q L, filters and dashboards.

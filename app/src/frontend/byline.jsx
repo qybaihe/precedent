@@ -1,6 +1,6 @@
 // Confluence page byline: the decisions captured from this page and what is happening to them in Jira.
 import React, { useEffect, useState } from 'react';
-import ForgeReconciler, { Box, Stack, Inline, Text, Link, Lozenge, Spinner, Button, Icon, xcss } from '@forge/react';
+import ForgeReconciler, { Box, Stack, Inline, Text, Link, Spinner, Button, Icon, xcss } from '@forge/react';
 import { invoke, rovo } from '@forge/bridge';
 import { AGENT, cardStyle, DecisionId, DecisionStatus, Guardrails } from './ui';
 
@@ -8,7 +8,9 @@ const App = () => {
   const [items, setItems] = useState(null);
   const [rovoOn, setRovoOn] = useState(false);
   useEffect(() => {
-    invoke('getPageDecisions').then(setItems);
+    // page order (DEC-1, DEC-2, …) reads better here than newest-first
+    const num = (x) => Number(String(x.decision.id).replace(/\D/g, '')) || 0;
+    invoke('getPageDecisions').then((list) => setItems([...(list || [])].sort((a, b) => num(a) - num(b))));
     rovo.isEnabled().then(setRovoOn).catch(() => setRovoOn(false));
   }, []);
 
@@ -48,7 +50,6 @@ const App = () => {
                   </Text>
                   {conflicts.map((i) => (
                     <Inline key={i.key} space="space.050" alignBlock="center">
-                      <Lozenge appearance="removed">conflict</Lozenge>
                       <Link href={i.url} openNewTab>
                         {i.key}
                       </Link>

@@ -78,12 +78,15 @@ const App = () => {
               {c.conflicts
                 .filter((x) => !x.acknowledged)
                 .map((x) => (
-                  <Inline key={x.decision.id} space="space.050" alignBlock="center">
-                    <DecisionId id={x.decision.id} />
-                    <Text size="small" maxLines={1}>
+                  // id on its own line so a long title can't squeeze the lozenge
+                  <Stack key={x.decision.id} space="space.025">
+                    <Box>
+                      <DecisionId id={x.decision.id} />
+                    </Box>
+                    <Text size="small" maxLines={2}>
                       {x.decision.title}
                     </Text>
-                  </Inline>
+                  </Stack>
                 ))}
             </Stack>
           ),

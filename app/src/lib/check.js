@@ -153,6 +153,12 @@ export function bm25(index, queryText, { k1 = 1.2, b = 0.75, expand = false } = 
 
 // ---------- the check itself ----------
 
+// Words too generic in engineering text to make two items "about the same topic" on their own
+// ("data" + "storage" would otherwise relate a privacy guideline to a database decision).
+const WEAK_OVERLAP = new Set(
+  tokenize('data document documents storage store stores service services system systems team teams user users customer customers process feature product page pages new support'),
+);
+
 function inScope(decision, work) {
   const projects = decision.scope?.projects || [];
   if (projects.length && work.projectKey && !projects.includes(work.projectKey)) return false;
@@ -212,7 +218,12 @@ export function checkWork(work, decisions, { acknowledged = [] } = {}) {
   const ranked = bm25(index, text);
   const top = ranked[0]?.score || 0;
   const related = ranked
-    .filter((r) => !hitIds.has(r.decision.id) && r.overlap.length >= 2 && r.score >= Math.max(3, top * 0.6))
+    .filter(
+      (r) =>
+        !hitIds.has(r.decision.id) &&
+        r.overlap.filter((t) => !WEAK_OVERLAP.has(t)).length >= 2 &&
+        r.score >= Math.max(3, top * 0.6),
+    )
     .slice(0, 4)
     .map((r) => ({ decision: summarizeDecision(r.decision), score: Number(r.score.toFixed(2)), overlap: r.overlap }));
 

@@ -5,7 +5,6 @@ import ForgeReconciler, {
   Stack,
   Inline,
   Text,
-  Strong,
   Button,
   LoadingButton,
   SectionMessage,
@@ -336,10 +335,7 @@ const App = () => {
       <Inline space="space.050" alignBlock="center">
         <Icon glyph="search" label="" size="small" color="color.icon.subtle" />
         <Text size="small" color="color.text.subtle">
-          JQL:
-        </Text>
-        <Text size="small">
-          <Strong>precedentConflicts &gt; 0</Strong>
+          JQL: precedentConflicts &gt; 0
         </Text>
       </Inline>
 

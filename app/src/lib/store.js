@@ -165,6 +165,10 @@ export async function listChecks() {
   return listByPrefix(PREFIX.check);
 }
 
+export async function deleteCheck(issueKey) {
+  await kvs.delete(`${PREFIX.check}${issueKey}`);
+}
+
 // ---------- settings ----------
 
 const DEFAULT_SETTINGS = { commentOnConflict: false, harvestJiraComments: true, harvestConfluence: true };

@@ -56,7 +56,10 @@ export function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  // Date-only values (e.g. "2026-03-12" from a page title) are stored as UTC midnight: show that
+  // calendar day instead of shifting it into the viewer's time zone.
+  const dateOnly = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', ...(dateOnly ? { timeZone: 'UTC' } : {}) });
 }
 
 export function ago(iso) {
@@ -85,18 +88,13 @@ export const DecisionMeta = ({ decision }) => {
   const src = decision.source || {};
   return (
     <Inline space="space.100" shouldWrap alignBlock="center">
-      {decision.owner?.name ? (
+      {decision.owner?.name || decision.decidedAt ? (
         <Inline space="space.050" alignBlock="center">
-          <Icon glyph="person" label="Owner" size="small" color="color.icon.subtle" />
+          {decision.owner?.name ? <Icon glyph="person" label="Owner" size="small" color="color.icon.subtle" /> : null}
           <Text size="small" color="color.text.subtle">
-            {decision.owner.name}
+            {[decision.owner?.name, formatDate(decision.decidedAt)].filter(Boolean).join(' · ')}
           </Text>
         </Inline>
-      ) : null}
-      {decision.decidedAt ? (
-        <Text size="small" color="color.text.subtle">
-          {formatDate(decision.decidedAt)}
-        </Text>
       ) : null}
       {src.url ? (
         <Tooltip content={src.kind || src.label || 'Source'}>

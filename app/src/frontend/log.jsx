@@ -48,6 +48,14 @@ const STATUS_OPTIONS = [
 const FILTERS = [{ label: 'All statuses', value: 'all' }, ...STATUS_OPTIONS];
 
 const pageStyle = xcss({ padding: 'space.300', maxWidth: '1280px' });
+const rowStyle = xcss({ paddingBlock: 'space.100' });
+const filterStyle = xcss({ minWidth: '180px' });
+
+/** Same words, ignoring case and punctuation (a statement that only repeats its title adds nothing). */
+const sameText = (a, b) => {
+  const norm = (t) => (t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return norm(a) === norm(b);
+};
 
 const SOURCE_ICON = { confluence: 'page', jira: 'comment', rovo: 'rovo-chat', manual: 'edit' };
 
@@ -437,13 +445,17 @@ const App = () => {
         {
           key: 'decision',
           content: (
-            <Stack space="space.050">
-              <Text weight="semibold">{d.title}</Text>
-              <Text size="small" color="color.text.subtle" maxLines={2}>
-                {d.statement}
-              </Text>
-              <Guardrails decision={d} />
-            </Stack>
+            <Box xcss={rowStyle}>
+              <Stack space="space.050">
+                <Text weight="semibold">{d.title}</Text>
+                {sameText(d.statement, d.title) ? null : (
+                  <Text size="small" color="color.text.subtle" maxLines={2}>
+                    {d.statement}
+                  </Text>
+                )}
+                <Guardrails decision={d} />
+              </Stack>
+            </Box>
           ),
         },
         { key: 'owner', content: <Text>{d.owner?.name || '—'}</Text> },
@@ -522,10 +534,12 @@ const App = () => {
                     <Label labelFor="q">Search</Label>
                     <Textfield id="q" value={query} placeholder="Topic, owner, DEC id…" onChange={(e) => setQuery(e.target.value)} />
                   </Stack>
-                  <Stack space="space.050">
-                    <Label labelFor="status-filter">Status</Label>
-                    <Select inputId="status-filter" options={FILTERS} value={status} onChange={setStatus} />
-                  </Stack>
+                  <Box xcss={filterStyle}>
+                    <Stack space="space.050">
+                      <Label labelFor="status-filter">Status</Label>
+                      <Select inputId="status-filter" options={FILTERS} value={status} onChange={setStatus} />
+                    </Stack>
+                  </Box>
                 </Inline>
                 <DynamicTable
                   head={{

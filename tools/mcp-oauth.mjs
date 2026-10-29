@@ -49,7 +49,8 @@ url.search = new URLSearchParams({
   code_challenge_method: 'S256',
   state,
   resource: RESOURCE,
-  scope: 'offline_access',
+  // like Claude Code: ask for what the resource advertises (offline_access alone is rejected)
+  scope: (prm.scopes_supported || ['offline_access']).join(' '),
 }).toString();
 
 const codePromise = new Promise((resolve, reject) => {
@@ -66,16 +67,22 @@ const codePromise = new Promise((resolve, reject) => {
   setTimeout(() => reject(new Error('timed out waiting for consent')), 10 * 60 * 1000);
 });
 
-const ctx = await chromium.launchPersistentContext(path.resolve(HERE, '..', '.browser-profile'), {
+// AUTH_URL_FILE=… : don't open a browser, just write the consent URL there (e.g. to open it in
+// tools/ui-driver.mjs, which already holds the profile) and wait for the callback.
+if (process.env.AUTH_URL_FILE) {
+  fs.writeFileSync(process.env.AUTH_URL_FILE, url.toString(), { mode: 0o600 });
+  console.log('AUTH_URL_WRITTEN');
+}
+const ctx = process.env.AUTH_URL_FILE ? null : await chromium.launchPersistentContext(path.resolve(HERE, '..', '.browser-profile'), {
   headless: false,
   viewport: { width: 1280, height: 900 },
   ignoreDefaultArgs: ['--enable-automation'],
 });
-const page = ctx.pages()[0] || (await ctx.newPage());
-await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+const page = ctx && (ctx.pages()[0] || (await ctx.newPage()));
+if (page) await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
 
 // Best-effort automation of the consent screen: pick the site, then approve.
-(async () => {
+if (page) (async () => {
   for (let i = 0; i < 60; i++) {
     await page.waitForTimeout(2000);
     if (page.url().startsWith(REDIRECT)) return;
@@ -107,4 +114,4 @@ const token = await tokenRes.json();
 if (!token.access_token) throw new Error(`token exchange failed: ${JSON.stringify(token).slice(0, 300)}`);
 fs.writeFileSync(out, JSON.stringify({ ...token, client_id: reg.client_id, token_endpoint: meta.token_endpoint, obtained_at: Date.now() }), { mode: 0o600 });
 console.log('MCP token saved (expires in', token.expires_in, 's)');
-await ctx.close();
+await ctx?.close();

@@ -4,7 +4,7 @@
 import { Queue } from '@forge/events';
 import { checkWork } from './check.js';
 import { getIssue, issueText, issueMeta, setIssueProperty, siteUrl, searchIssues } from './products.js';
-import { listDecisions, getCheck, saveCheck, listChecks } from './store.js';
+import { listDecisions, getCheck, saveCheck, listChecks, deleteCheck } from './store.js';
 
 export const jobs = new Queue({ key: 'precedent-jobs' });
 
@@ -63,7 +63,12 @@ export async function recheck({ jql = 'updated >= -90d ORDER BY updated DESC', m
       checked++;
       if (r.status === 'conflict') conflicts++;
     } catch (e) {
-      console.warn(`Skipping ${p.issue?.key}: ${e.message}`);
+      // deleted (or moved out of reach) while we weren't listening: drop the stale result
+      if (e.status === 404) {
+        // eslint-disable-next-line no-await-in-loop
+        await deleteCheck(p.issue.key);
+        console.log(`forgot ${p.issue.key} (no longer exists)`);
+      } else console.warn(`Skipping ${p.issue?.key}: ${e.message}`);
     }
   }
   return { checked, conflicts };

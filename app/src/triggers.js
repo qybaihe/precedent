@@ -2,15 +2,20 @@
 
 import { checkIssue, recheck, enqueueRecheck, jobs } from './lib/checker.js';
 import { harvestConfluencePage, harvestJiraComment } from './lib/harvest.js';
-import { getSettings } from './lib/store.js';
+import { getSettings, deleteCheck } from './lib/store.js';
 import { recentPageIds } from './lib/products.js';
 
 const CONTENT_FIELDS = new Set(['summary', 'description', 'labels', 'components', 'Component']);
 
-/** Jira work item created/updated: re-check it when its text or labels changed. */
+/** Jira work item created/updated: re-check it when its text or labels changed. Deleted: forget it. */
 export async function onJiraIssue(event) {
   const key = event.issue?.key;
   if (!key) return;
+  if (event.eventType === 'avi:jira:deleted:issue') {
+    await deleteCheck(key);
+    console.log(`forgot deleted ${key}`);
+    return;
+  }
   if (event.eventType === 'avi:jira:updated:issue') {
     const items = event.changelog?.items || [];
     if (items.length && !items.some((i) => CONTENT_FIELDS.has(i.field) || CONTENT_FIELDS.has(i.fieldId))) return;

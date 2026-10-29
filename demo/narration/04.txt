@@ -1,1 +1,1 @@
-It works live. Integrating Adyen? Flagged against the decision to standardize on Stripe. And it understands direction: removing MongoDB is aligned with the decision, not a conflict.
+It works live. Here is a brand new work item: integrate Adyen for EU card payments. The moment it is created, Precedent flags it against the decision to standardize on Stripe, owned by Dana Kim. And it understands direction: removing MongoDB from the refunds service is aligned with the decision, not a conflict.

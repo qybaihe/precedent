@@ -35,12 +35,21 @@ for s in scenes:
     wav = ROOT / 'narration' / f'{n:02d}.wav'
     narr = dur(wav)
     start = max(0.0, s['readyMs'] / 1000)
-    recorded = (s['endMs'] - s['readyMs']) / 1000
+    end = s['endMs'] / 1000
+    # keep [ready, end] minus the dead-time cuts recorded by record.mjs
+    keep, cursor = [], start
+    for a, b in sorted((a / 1000, b / 1000) for a, b in s.get('cuts', []) if b is not None):
+        if a > cursor:
+            keep.append((cursor, a))
+        cursor = max(cursor, b)
+    keep.append((cursor, end))
+    recorded = sum(b - a for a, b in keep)
     length = max(recorded, LEAD + narr + TAIL)
     out = TMP / f'scene{n:02d}.mp4'
-    # video: trim, hold the last frame if narration runs longer, scale into 1920x1080
+    select = '+'.join(f'between(t,{a:.3f},{b:.3f})' for a, b in keep)
+    # video: keep segments, hold the last frame if narration runs longer, scale into 1920x1080
     vf = (
-        f"trim=start={start:.3f},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={max(0, length - recorded) + 0.1:.3f},"
+        f"select='{select}',setpts=N/25/TB,tpad=stop_mode=clone:stop_duration={max(0, length - recorded) + 0.1:.3f},"
         "scale=1920:1080:force_original_aspect_ratio=decrease:flags=lanczos,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x0b1220,fps=30,format=yuv420p"
     )
     af = f"adelay={int(LEAD * 1000)}|{int(LEAD * 1000)},apad,atrim=0:{length:.3f}"
