@@ -1,0 +1,10 @@
+{
+  "name": "lumen-payments",
+  "private": true,
+  "type": "module",
+  "description": "Lumen Pay payments service (demo repository for the Precedent video)",
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}

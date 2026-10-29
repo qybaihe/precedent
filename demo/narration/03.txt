@@ -1,1 +1,1 @@
-Here is a new work item: move the payout ledger to MongoDB. Precedent checked it the moment it was written. It contradicts D E C one: keep all transactional payment data in PostgreSQL. It shows the exact sentence that tripped the guardrail, who decided, when, and where.
+Months later, someone files new work: move payout reconciliation to MongoDB. Before they even press create, Jira's own create dialog warns them: already decided in D E C one, with who decided, when, and what to use instead.

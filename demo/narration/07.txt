@@ -1,1 +1,1 @@
-Precedent also exposes the same actions as MCP tools. Any team can add them to its own agents in Rovo Studio. Here, a custom Architecture Guard agent checks a planned change, finds the decision it would break, and proposes a compliant design instead. An open source skill file brings the same check to coding agents.
+Now a developer opens the work item in Claude Code, straight from Jira. Jira hands over the summary and the description, and with it, the Precedent brief.

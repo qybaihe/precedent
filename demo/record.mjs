@@ -27,10 +27,6 @@ const DURATIONS = Object.fromEntries(
 // Native 1920x1080 frames with the browser zoomed to 120% (lays out like 1600x900, so UI text stays
 // large and crisp). Playwright's recorder captures CSS pixels, so deviceScaleFactor would not help.
 const VIEW = { width: 1920, height: 1080 };
-// Rovo Studio on the demo site: the tool catalog and a customer-built agent ("Architecture Guard") that
-// uses Precedent's rovo:mcp tools.
-const STUDIO = 'https://studio.atlassian.com/w/71f49200-63ca-4877-9290-ce077e70c86e/spaces/9099cc47-0671-45ca-a639-4ca88b824934/s/bd3ab69c-fcd4-42ee-bf1a-34f263587814';
-const STUDIO_AGENT = `${STUDIO}/agents/ari%3Acloud%3Arovo%3A%3Aagent%2Factivation%2Fa01cb219-2373-4457-91eb-08ba499cdd7d%2Fade417d9-a5fe-424c-9080-17dad78bf232/v/draft/details`;
 const ZOOM_LEVEL = 1.0; // Chrome zoom level = log1.2(factor): 1.0 -> 120 %
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -132,15 +128,27 @@ async function scrollDetails(page, amount = 520) {
 
 // ---------------- scenes ----------------
 
+/** Precedent's Custom UI runs in a Forge iframe; its contents are only reachable through it. */
+const forge = (page) => page.frameLocator('iframe[src*="cdn.prod.atlassian-dev.net"]').first();
+
+async function openPay1(page) {
+  await page.goto(`${SITE}/browse/PAY-1`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: /Store payout ledger in MongoDB/ }).first().waitFor({ timeout: 40000 });
+  await tidy(page);
+  await fitWindow(page);
+  await expandPrecedent(page, { hold: 100 });
+  await forge(page).getByText(/Contradicts 1 team decision/).waitFor({ timeout: 40000 });
+}
+
 const SCENES = {
   1: async (page) => {
     await page.goto(`file://${path.join(HERE, 'cards', 'title.html')}`);
     return { ready: true };
   },
 
+  // Confluence: the decision is made where the team writes
   2: async (page, ready) => {
     await page.goto(`${SITE}/wiki/spaces/ENG/overview`, { waitUntil: 'domcontentloaded' });
-    // open by title so it survives reseeds (page ids change)
     const link = page.getByRole('link', { name: /Payments Architecture Review/ }).first();
     await link.waitFor({ timeout: 40000 });
     await link.click();
@@ -150,209 +158,195 @@ const SCENES = {
     await sleep(1500);
     ready();
     await moveTo(page, 760, 420);
-    await sleep(1200);
-    await smoothScroll(page, 1700, { step: 100, pause: 120 });
-    await sleep(900);
-    await smoothScroll(page, -1700, { step: 200, pause: 60 });
-    await sleep(600);
+    await sleep(800);
+    await smoothScroll(page, 600, { step: 60, pause: 110 });
+    await hoverOn(page, page.getByText(/Keep all transactional payment data in PostgreSQL/).first(), 2600);
+    await smoothScroll(page, -600, { step: 150, pause: 60 });
+    await sleep(500);
     const byline = page.getByText(/\d+ decisions? · \d+ conflicts?/).first();
     await clickOn(page, byline);
-    await page.getByText(/tracked by Precedent/).waitFor({ timeout: 20000 });
+    await forge(page).getByText(/tracked by Precedent/).waitFor({ timeout: 30000 });
     await shot(page, 'scene2-byline');
-    await sleep(1200);
-    const dlg = page.getByText(/Contradicted by/).first();
-    if (await dlg.isVisible().catch(() => false)) await hoverOn(page, dlg, 1500);
+    await sleep(1500);
+    await hoverOn(page, forge(page).getByText(/Contradicted by/i).first(), 2500);
     await sleep(2500);
   },
 
-  3: async (page, ready) => {
-    await page.goto(`${SITE}/browse/PAY-1`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: /Store payout ledger in MongoDB/ }).first().waitFor({ timeout: 40000 });
+  // Jira's own Create dialog: "Already decided in DEC-1" under the summary (jira:uiModifications)
+  3: async (page, ready, cut) => {
+    await page.goto(`${SITE}/jira/software/projects/PAY/boards`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.getByRole('button', { name: /^Create$/ }).first().waitFor({ timeout: 40000 });
     await tidy(page);
     await fitWindow(page);
     await sleep(1500);
     ready();
-    await sleep(800);
-    await expandPrecedent(page);
-    await page.getByText(/Contradicts 1 team decision/).waitFor({ timeout: 40000 });
+    await clickOn(page, page.getByRole('button', { name: /^Create$/ }).first());
+    const summary = page.locator('[role=dialog] input[name=summary], [role=dialog] #summary-field').first();
+    await summary.waitFor({ timeout: 30000 });
+    // the dialog opens on the last project used: make sure it is Payments
+    const project = page.locator('[role=dialog] button', { hasText: /^(PLF|CHK|PAY|[A-Z]{2,6})$/ }).first();
+    if ((await project.innerText().catch(() => 'PAY')).trim() !== 'PAY') {
+      await clickOn(page, project, { hold: 200 });
+      await sleep(600);
+      await page.keyboard.type('Pay', { delay: 30 });
+      await page.getByRole('menuitem', { name: /^Payments \(PAY\)$/ }).first().click({ timeout: 10000 });
+      await page.locator('[role=dialog] button', { hasText: /^PAY$/ }).first().waitFor({ timeout: 10000 });
+    }
     await sleep(1200);
-    await scrollDetails(page);
-    await shot(page, 'scene3-panel');
-    await sleep(1500);
-    await hoverOn(page, page.getByText(/Trips guardrail/).first(), 2500);
-    await hoverOn(page, page.getByText(/Priya Shah/).first(), 1500);
-    await hoverOn(page, page.getByRole('link', { name: /Payments Architecture Review/ }).first(), 2500);
-    await sleep(2000);
+    await clickOn(page, summary, { hold: 200 });
+    await page.keyboard.type('Move payout reconciliation to MongoDB', { delay: 45 });
+    await sleep(500);
+    await page.keyboard.press('Tab');
+    await page.getByText(/Already decided in DEC-1/).first().waitFor({ timeout: 20000 });
+    await sleep(600);
+    await hoverOn(page, page.getByText(/Already decided in DEC-1/).first(), 1600);
+    const info = page.locator('[role=dialog] button[aria-label*="View details" i], [role=dialog] button:has-text("View details")').first();
+    await clickOn(page, info, { hold: 250 });
+    await page.getByText(/rules out MongoDB/).first().waitFor({ timeout: 10000 });
+    await shot(page, 'scene3-create');
+    await sleep(8000);
+    // leave without creating anything (off camera)
+    cut.start();
+    await page.keyboard.press('Escape');
+    await sleep(400);
+    await page.locator('[role=dialog] button:has-text("Close")').first().click({ timeout: 5000 }).catch(() => {});
+    await page.locator('[role=dialog] button:has-text("Discard")').first().click({ timeout: 5000 }).catch(() => {});
+    cut.end();
   },
 
-  4: async (page, ready, cut) => {
-    await page.goto(`${SITE}/jira/software/projects/PAY/boards`, { waitUntil: 'domcontentloaded' }).catch(() => {});
-    await page.goto(`${SITE}/browse/PAY-6`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: /Retry webhook deliveries/ }).first().waitFor({ timeout: 40000 });
-    await tidy(page);
-    await fitWindow(page);
+  // the issue panel: conflict, evidence, compliant alternative, and the brief for coding agents
+  4: async (page, ready) => {
+    await openPay1(page);
     await sleep(1000);
     ready();
-    // create a work item through the real create dialog
-    await clickOn(page, page.getByRole('button', { name: /^Create$/ }).first());
-    const summary = page.getByLabel(/^Summary/).first();
-    await summary.waitFor({ timeout: 20000 });
-    await sleep(500);
-    await summary.click();
-    await page.keyboard.type('Integrate Adyen for EU card payments', { delay: 45 });
-    await sleep(500);
-    await shot(page, 'scene4-create');
-    const createBtn = page.getByRole('dialog').getByRole('button', { name: /^Create$/ }).last();
-    await clickOn(page, createBtn);
-    // success flag: "Created Story PAY-7"
-    const flag = page.getByText(/Created \w+ PAY-\d+/).first();
-    await flag.waitFor({ timeout: 20000 }).catch(() => {});
-    const newKey = ((await flag.textContent().catch(() => '')) || '').match(/PAY-\d+/)?.[0] || 'PAY-7';
-    await sleep(1200);
-    cut.start(); // waiting for the trigger and the page load is dead air
-    await sleep(2500); // let the trigger check it
-    await page.goto(`${SITE}/browse/${newKey}`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: /Integrate Adyen/ }).first().waitFor({ timeout: 40000 });
-    await sleep(800);
-    cut.end();
-    await expandPrecedent(page);
-    await page.getByText(/Contradicts 1 team decision/).waitFor({ timeout: 40000 });
-    await sleep(800);
-    await scrollDetails(page);
+    await scrollDetails(page, 380);
     await sleep(600);
-    await hoverOn(page, page.getByText(/Standardize on Stripe/).first(), 2200);
-    cut.start();
-    await page.goto(`${SITE}/browse/PAY-4`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: /Remove MongoDB/ }).first().waitFor({ timeout: 40000 });
-    await sleep(600);
-    cut.end();
-    await expandPrecedent(page);
-    await page.getByText(/Consistent with team decisions/).waitFor({ timeout: 40000 });
-    await sleep(600);
-    await scrollDetails(page, 400);
-    await shot(page, 'scene4-aligned');
-    await hoverOn(page, page.getByText(/Removes or replaces/).first(), 2500);
-    await sleep(1500);
-    fs.writeFileSync(path.join(TMP, 'scene4-created-key.txt'), newKey);
+    await hoverOn(page, forge(page).getByText(/Trips guardrail/i).first(), 1800);
+    await hoverOn(page, forge(page).getByText(/Compliant alternative/).first(), 2200);
+    await scrollDetails(page, 520);
+    await hoverOn(page, forge(page).getByText(/Brief for coding agents/).first(), 1800);
+    await shot(page, 'scene4-panel');
+    // the brief Precedent keeps at the end of the description
+    await hoverOn(page, page.getByText(/Precedent brief/).first(), 1800);
+    await hoverOn(page, page.getByText(/Denied packages/).first(), 2200);
+    await hoverOn(page, page.getByText(/For coding agents/).first(), 2000);
   },
 
+  // the workflow: Done is blocked while the conflict is open (jira:workflowValidator)
   5: async (page, ready) => {
-    await page.goto(`${SITE}/browse/PAY-1`, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: /Store payout ledger in MongoDB/ }).first().waitFor({ timeout: 40000 });
-    await tidy(page);
-    await fitWindow(page);
-    await expandPrecedent(page, { hold: 100 });
-    await page.getByText(/Contradicts 1 team decision/).waitFor({ timeout: 40000 });
-    await scrollDetails(page);
+    await openPay1(page);
     await sleep(800);
     ready();
-    await sleep(700);
-    await clickOn(page, page.getByRole('button', { name: /Ask Precedent/ }).first());
+    await clickOn(page, page.getByRole('button', { name: /^In Progress/ }).first());
+    await sleep(900);
+    const done = page.getByRole('option', { name: /^Done/ }).or(page.getByRole('menuitem', { name: /^Done/ })).or(page.locator('[role=listbox] :text-is("Done")')).first();
+    await clickOn(page, done);
+    await page.getByText(/Blocked by Precedent/).first().waitFor({ timeout: 30000 });
+    await sleep(500);
+    await hoverOn(page, page.getByText(/Blocked by Precedent/).first(), 1500);
+    await shot(page, 'scene5-blocked');
+    await sleep(5000);
+  },
+
+  // Rovo explains, citing the decision
+  6: async (page, ready, cut) => {
+    await openPay1(page);
+    await scrollDetails(page, 380);
+    await sleep(800);
+    ready();
+    await sleep(500);
+    await clickOn(page, forge(page).getByRole('button', { name: /Ask Precedent/ }).first());
+    // only Rovo's answer card counts: the work item itself mentions DEC-1 in its Precedent brief
+    const answer = page.locator('[data-testid="assistant-response-card-layout"]').last();
+    cut.start();
+    await answer.getByText(/DEC-1/).first().waitFor({ timeout: 90000 }).catch(() => {});
+    cut.end();
     // wait until Rovo has finished the answer (it ends with the options)
-    await page.getByText(/Supersede the decision|supersede/i).last().waitFor({ timeout: 90000 }).catch(() => {});
-    await tidy(page); // "Try Rovo on your phone"
-    await shot(page, 'scene5-rovo');
+    await answer.getByText(/^Supersede/).first().waitFor({ timeout: 90000 }).catch(() => {});
+    await tidy(page);
+    await shot(page, 'scene6-rovo');
     await sleep(2500);
     await moveTo(page, 1400, 450);
-    await smoothScroll(page, 700, { step: 50, pause: 150 });
+    await smoothScroll(page, 600, { step: 50, pause: 150 });
     await sleep(3500);
   },
 
-  6: async (page, ready, cut) => {
-    await page.goto(`${SITE}/jira/software/projects/PAY/apps/${APP}/${ENV}`, { waitUntil: 'domcontentloaded' });
-    await page.getByText(/Decision Radar · PAY/).waitFor({ timeout: 40000 });
+  // Jira's Open in coding tool hands summary + description (with the brief) to Claude Code
+  7: async (page, ready) => {
+    await page.goto(`${SITE}/browse/PAY-1`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: /Store payout ledger in MongoDB/ }).first().waitFor({ timeout: 40000 });
     await tidy(page);
     await fitWindow(page);
-    await sleep(1500);
-    ready();
-    await shot(page, 'scene6-radar');
-    await hoverOn(page, page.getByText(/Open conflicts/).first(), 1500);
-    await hoverOn(page, page.getByText(/Store payout ledger in MongoDB/).first(), 1800);
-    await clickOn(page, page.getByText(/^Open in JQL$/).first());
-    await sleep(500);
-    cut.start(); // issue search loading
-    await page.waitForURL(/jql=/, { timeout: 30000 }).catch(() => {});
-    // results list (the JQL editor keeps the precedentConflicts alias as typed)
-    await page.getByText(/Store payout ledger in MongoDB/).first().waitFor({ timeout: 30000 }).catch(() => {});
-    await tidy(page);
-    await sleep(500);
-    cut.end();
-    await shot(page, 'scene6-jql');
-    await sleep(4500);
-  },
-
-  // Precedent's rovo:mcp tools in Rovo Studio, used by a customer-built agent.
-  // SCENE7=terminal instead replays a real `claude -p` session against the external MCP endpoint
-  // (demo/cards/transcript.js from demo/mcp-session.sh).
-  7: async (page, ready, cut) => {
-    if (process.env.SCENE7 === 'terminal') {
-      await page.goto(`file://${path.join(HERE, 'cards', 'terminal.html')}`);
-      ready();
-      await page.waitForFunction(() => document.title === 'DONE', null, { timeout: 120000 });
-      await sleep(2500);
-      return;
-    }
-    await page.goto(`${STUDIO}/tools`, { waitUntil: 'domcontentloaded' });
-    await page.getByText(/^Connected apps$/).first().waitFor({ timeout: 40000 });
-    await tidy(page);
-    await fitWindow(page);
-    const precedentFilter = page.locator('span:visible', { hasText: /^Precedent$/ }).last();
-    await precedentFilter.click();
-    await page.getByRole('button', { name: /^Select Check work against decisions$/ }).first().waitFor({ timeout: 20000 });
-    await sleep(800);
-    ready();
-    await hoverOn(page, page.getByText(/^Check work against decisions$/).last(), 1800);
-    await hoverOn(page, page.getByText(/^Record a decision$/).last(), 1000);
-    cut.start();
-    await page.goto(STUDIO_AGENT, { waitUntil: 'domcontentloaded' });
-    await page.getByText(/^Instructions$/).first().waitFor({ timeout: 40000 });
-    await page.locator('button[aria-label="Close"]:visible').first().click({ timeout: 3000 }).catch(() => {}); // what's-new banner
-    await tidy(page);
+    const dev = page.getByRole('button', { name: /^Open in coding tool$/ }).first();
+    // Jira remembers whether the Development section is expanded
+    const section = page.getByRole('button', { name: /^Development/ }).first();
+    await section.waitFor({ timeout: 30000 });
+    if ((await section.getAttribute('aria-expanded')) === 'false') await section.click();
+    await dev.waitFor({ timeout: 20000 });
+    console.log('  scene 7: coding tool button visible');
     await sleep(1000);
-    cut.end();
-    await hoverOn(page, page.getByText(/^Tools$/).last(), 1200);
-    await clickOn(page, page.getByRole('button', { name: /^Test$/ }));
-    const composer = page.locator('[aria-label="Describe what you want to know or do next"]').last();
-    await composer.waitFor({ timeout: 30000 });
-    await sleep(600);
-    await composer.click();
-    await page.keyboard.type('I am about to move the payout ledger to a MongoDB collection so the schema can evolve without migrations. Check our team decisions first.', { delay: 18 });
-    await sleep(400);
-    await page.keyboard.press('Enter');
-    await sleep(1500);
-    cut.start(); // agent thinking
-    await page.getByText(/conflicts? with|Stop/).last().waitFor({ timeout: 90000 }).catch(() => {});
-    await sleep(300);
-    cut.end();
-    await page.getByText(/JSONB/).last().waitFor({ timeout: 60000 }).catch(() => {});
-    await sleep(1500);
-    await moveTo(page, 1400, 500);
-    await smoothScroll(page, 500, { step: 50, pause: 140 });
-    await sleep(3000);
+    ready();
+    await hoverOn(page, page.getByText(/Precedent brief/).first(), 1600);
+    await clickOn(page, dev);
+    // pick the tool: the list shows Claude Code, Cursor, GitHub Copilot, Codex, Rovo CLI, VS Code
+    const select = page.locator('[data-testid^="deeplink.deeplink-agent-select-select"]').first();
+    await select.waitFor({ timeout: 20000 });
+    console.log('  scene 7: tool select visible');
+    await sleep(900);
+    await clickOn(page, select, { hold: 250 });
+    const option = page.getByRole('option', { name: /^Claude Code/ }).first();
+    await option.waitFor({ timeout: 10000 });
+    await sleep(1400);
+    await clickOn(page, option, { hold: 250 });
+    const openIt = page.locator('button', { hasText: /^Open Claude Code$/ }).first();
+    if (!(await openIt.waitFor({ timeout: 5000 }).then(() => true).catch(() => false))) {
+      console.log('  scene 7: buttons now', JSON.stringify(await page.$$eval('button', (bs) => bs.map((b) => b.innerText.trim()).filter((t) => /^Open|Claude/.test(t)))));
+      await select.focus();
+      await page.keyboard.press('ArrowDown');
+      await sleep(500);
+      await page.keyboard.press('Enter');
+    }
+    await openIt.waitFor({ timeout: 20000 });
+    await sleep(900);
+    await hoverOn(page, page.getByText(/work item context is pre-loaded/i).first(), 1400);
+    await hoverOn(page, openIt, 2500);
+    await shot(page, 'scene7-coding-tool');
   },
 
+  // the real Claude Code session with that prompt (demo/coding-session.sh)
   8: async (page, ready) => {
-    await page.goto(`${SITE}/wiki/apps/${APP}/${ENV}/decision-log`, { waitUntil: 'domcontentloaded' });
-    await page.getByText(/Active decisions/).waitFor({ timeout: 40000 });
+    await page.goto(`file://${path.join(HERE, 'cards', 'terminal.html')}`);
+    ready();
+    await page.waitForFunction(() => document.title === 'DONE', null, { timeout: 120000 });
+    await sleep(3500); // time to read the agent's answer
+  },
+
+  // living decisions: a tripped tripwire on the Radar, then the meeting-notes inbox
+  9: async (page, ready, cut) => {
+    await page.goto(`${SITE}/jira/software/projects/PLF/apps/${APP}/${ENV}`, { waitUntil: 'domcontentloaded' });
+    await forge(page).getByText(/need(s)? review/).first().waitFor({ timeout: 40000 });
     await tidy(page);
     await fitWindow(page);
-    await sleep(1500);
+    await sleep(1200);
     ready();
-    await shot(page, 'scene8-log');
-    await hoverOn(page, page.getByText(/Open conflicts/).first(), 1200);
-    await clickOn(page, page.getByRole('button', { name: /^DEC-1$/ }).first());
-    await page.getByText(/work items touching this decision/i).waitFor({ timeout: 30000 });
-    await sleep(1500);
-    await shot(page, 'scene8-detail');
-    await smoothScroll(page, 500, { step: 80, pause: 130 });
-    await sleep(2500);
-    await clickOn(page, page.getByRole('button', { name: /^Close$/ }).last(), { hold: 200 });
-    await sleep(700);
-    await clickOn(page, page.getByRole('tab', { name: /Setup/ }).first());
-    await sleep(2500);
+    await hoverOn(page, forge(page).getByText(/need(s)? review/).first(), 1200);
+    await hoverOn(page, forge(page).getByText(/Tripwire/).first(), 3200);
+    await shot(page, 'scene9-radar');
+    cut.start();
+    await page.goto(`${SITE}/jira/apps/${APP}/${ENV}`, { waitUntil: 'domcontentloaded' });
+    await forge(page).getByText(/Active decisions/i).first().waitFor({ timeout: 40000 });
+    await tidy(page);
+    await sleep(800);
+    cut.end();
+    await clickOn(page, forge(page).locator('button.tab', { hasText: 'Inbox' }).first());
+    await forge(page).getByText(/possible decisions? found/).first().waitFor({ timeout: 20000 });
+    await sleep(800);
+    await hoverOn(page, forge(page).getByText(/Cap card-on-file retries/).first(), 1800);
+    await hoverOn(page, forge(page).getByText(/Merge into DEC-2/).first(), 2500);
+    await shot(page, 'scene9-inbox');
   },
 
-  9: async (page) => {
+  10: async (page) => {
     await page.goto(`file://${path.join(HERE, 'cards', 'closing.html')}`);
     return { ready: true };
   },
@@ -361,13 +355,13 @@ const SCENES = {
 // ---------------- runner ----------------
 
 const wanted = process.argv.slice(2).map(Number).filter(Boolean);
-const order = (wanted.length ? wanted : [1, 2, 3, 4, 5, 6, 7, 8, 9]).filter((n) => SCENES[n]);
+const order = (wanted.length ? wanted : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).filter((n) => SCENES[n]);
 const indexFile = path.join(RAW, 'scenes.json');
 const index = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, 'utf8')) : [];
 
 // Card/terminal scenes are local files: record them with a throwaway profile so they don't need (or
 // lock) the logged-in one. Headless by default (independent of the screen size); HEADED=1 to watch.
-const LOCAL_SCENES = new Set(process.env.SCENE7 === 'terminal' ? [1, 7, 9] : [1, 9]);
+const LOCAL_SCENES = new Set([1, 8, 10]);
 const profile = order.every((n) => LOCAL_SCENES.has(n)) ? path.join(TMP, 'card-profile') : path.join(ROOT, '.browser-profile');
 const prefsFile = path.join(profile, 'Default', 'Preferences');
 fs.mkdirSync(path.dirname(prefsFile), { recursive: true });

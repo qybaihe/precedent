@@ -26,10 +26,16 @@
   .cursor { display: inline-block; width: 11px; height: 22px; background: #e6edf3; vertical-align: -4px; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   .spinner { color: #d97757; }
+  .code { color: #79c0ff; }
+  .paste { color: #8b949e; }
+  .paste b { color: #e6edf3; }
+  .pasted { margin: 8px 0 6px 28px; padding: 8px 14px; border-left: 2px solid #30363d; color: #8b949e; font-size: 17px; line-height: 1.45; white-space: pre-wrap; }
+  .pasted .brief { color: #e6edf3; }
+  .pasted .brief-head { color: #d2a8ff; font-weight: 700; }
 </style>
 </head>
 <body>
-<div class="bar"><span class="dot" style="background:#ff5f56"></span><span class="dot" style="background:#ffbd2e"></span><span class="dot" style="background:#27c93f"></span><span class="title">~/code/lumen-ledger — claude</span></div>
+<div class="bar"><span class="dot" style="background:#ff5f56"></span><span class="dot" style="background:#ffbd2e"></span><span class="dot" style="background:#27c93f"></span><span class="title">~/lumen-payments — claude</span></div>
 <div id="term"></div>
 <script>
 // transcript.js defines window.TRANSCRIPT = [{type:'user'|'tool'|'result'|'assistant', text, name, args}]
@@ -40,28 +46,52 @@ const term = document.getElementById('term');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function emph(s) {
-  return esc(s)
-    .replace(/(DEC-\d+)/g, '<span class="hl">$1</span>')
-    .replace(/\b(conflict|contradicts?)\b/gi, '<span class="hl">$1</span>')
-    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  // inline code first, so a glob like services/payments/** is never read as bold markup
+  return s.split(/(`[^`]*`?)/).map((part) => {
+    if (part.startsWith('`')) return `<span class="code">${esc(part.replace(/`/g, ''))}</span>`;
+    return esc(part)
+      .replace(/(DEC-\d+)/g, '<span class="hl">$1</span>')
+      .replace(/\b(conflict|contradicts?)\b/gi, '<span class="hl">$1</span>')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  }).join('');
 }
 async function typeInto(el, text, cps = 38) {
   const cur = document.createElement('span'); cur.className = 'cursor'; el.appendChild(cur);
   for (const ch of text) { cur.insertAdjacentText('beforebegin', ch); await sleep(1000 / cps); }
   cur.remove();
 }
-async function streamInto(el, text, wps = 14) {
+async function streamInto(el, text, wps = window.STREAM_WPS || 14) {
   const words = text.split(/(\s+)/);
   let acc = '';
   for (const w of words) { acc += w; el.innerHTML = emph(acc); term.scrollTop = term.scrollHeight; await sleep(w.trim() ? 1000 / wps : 0); }
 }
 (async () => {
   const head = document.createElement('div'); head.className = 'box';
-  head.innerHTML = '<b>✻ Claude Code</b><br><span class="muted">MCP: precedent · connected (mcp.atlassian.com/forge/92a37583…)</span>';
+  head.innerHTML = window.TERMINAL_HEAD || '<b>✻ Claude Code</b><br><span class="muted">MCP: precedent · connected (mcp.atlassian.com/forge/92a37583…)</span>';
   term.appendChild(head);
   await sleep(900);
   for (const step of window.TRANSCRIPT || []) {
-    if (step.type === 'user') {
+    if (step.type === 'user' && step.paste) {
+      // a pasted prompt (Jira's Open in coding tool): one line, then the part that matters
+      const lines = step.text.split('\n');
+      const p = document.createElement('div'); p.className = 'prompt';
+      p.innerHTML = `<span class="paste">[Pasted text #1 +${lines.length} lines]</span>`; term.appendChild(p);
+      await sleep(900);
+      const box = document.createElement('div'); box.className = 'pasted';
+      const from = lines.findIndex((l) => l.startsWith('<title>'));
+      const shown = lines.slice(from).filter((l) => !/^<\/?(JIRA_WORK_ITEM|project|key|id|cloudId|issueUrl)>|^\s*<key>|Kept up to date/.test(l));
+      let inBrief = false;
+      box.innerHTML = shown.map((l) => {
+        if (/Precedent brief/.test(l)) inBrief = true;
+        const t = esc(l.replace(/<\/?(title|description)>/g, ''));
+        return inBrief ? `<span class="${/Precedent brief/.test(l) ? 'brief-head' : 'brief'}">${t.replace(/(DEC-\d+)/g, '<span class="hl">$1</span>')}</span>` : t;
+      }).join('\n');
+      term.appendChild(box);
+      await sleep(window.PASTE_HOLD || 5200);
+      const sp = document.createElement('div'); sp.className = 'spinner'; sp.textContent = '✻ Thinking…'; term.appendChild(sp);
+      term.scrollTop = term.scrollHeight;
+      await sleep(1400); sp.remove();
+    } else if (step.type === 'user') {
       const p = document.createElement('div'); p.className = 'prompt'; term.appendChild(p);
       await typeInto(p, step.text);
       await sleep(700);
@@ -70,9 +100,9 @@ async function streamInto(el, text, wps = 14) {
     } else if (step.type === 'tool') {
       const t = document.createElement('div'); t.className = 'tool';
       t.innerHTML = `<span class="dotc">⏺</span> <span class="name">${esc(step.name)}</span> <span class="args">(${esc(step.args)})</span>`;
-      term.appendChild(t); await sleep(1300);
+      term.appendChild(t); await sleep(1300 * (window.STEP_SCALE || 1));
     } else if (step.type === 'result') {
-      const r = document.createElement('div'); r.className = 'result'; r.innerHTML = emph(step.text); term.appendChild(r); await sleep(1800);
+      const r = document.createElement('div'); r.className = 'result'; r.innerHTML = emph(step.text); term.appendChild(r); await sleep(1800 * (window.STEP_SCALE || 1));
     } else if (step.type === 'assistant') {
       const a = document.createElement('div'); a.className = 'assistant'; term.appendChild(a);
       await streamInto(a, step.text);

@@ -1,1 +1,1 @@
-Everything lives in one decision log, in Confluence and Jira, with editable guardrails, history, exceptions and supersession, plus one click sample content, so a new team sees value in a minute.
+This is a real Claude Code session with exactly that prompt. Before writing a line of code, the agent stops: the task would break D E C one. It reads the ledger code, explains why the decision exists, and proposes a PostgreSQL JSON B design instead, or an exception for the owner to approve.

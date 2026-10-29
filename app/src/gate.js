@@ -3,7 +3,7 @@
 //   - a workflow validator that blocks a transition (e.g. to Done) while the work item still
 //     contradicts an active decision (jira:workflowValidator)
 
-import api, { route } from '@forge/api';
+import api, { route, getAppContext } from '@forge/api';
 import { kvs } from '@forge/kvs';
 import { checkIssue } from './lib/checker.js';
 import { listDecisions, getCheck } from './lib/store.js';
@@ -57,4 +57,59 @@ export async function validateTransition(args) {
     console.warn(`validator for ${key} failed: ${e.message}`);
     return { result: true }; // never trap work behind an outage
   }
+}
+
+/**
+ * Add the validator to every transition into a Done-category status, in the workflows of the given
+ * projects. Runs as the admin who clicks (workflow changes need Administer
+ * Jira or project admin); system workflows that can't be edited are skipped.
+ */
+export async function gateableProjects() {
+  return (await listProjects()).filter((x) => x.type !== 'service_desk').map((p) => ({ id: p.id, key: p.key }));
+}
+
+/** `projectIds`: the projects to do in this call (the UI goes through them a few at a time). */
+export async function enableDoneGate(projectIds) {
+  const app = getAppContext();
+  const ruleKey = 'forge:expression-validator';
+  const key = `ari:cloud:ecosystem::extension/${app.appAri.appId}/${app.environmentAri.environmentId}/static/precedent-no-conflicts`;
+  const call = async (path, body) => {
+    const res = await api.asUser().requestJira(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+    if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 200)}`);
+    return res.json();
+  };
+  const prev = (await kvs.get('meta:doneGate')) || { workflows: [], skipped: [] };
+  const done = new Map(prev.workflows.map((w) => [w.id, w])); // workflow id -> { id, name, transitions }
+  const skipped = [];
+  const wanted = new Set((projectIds || []).map(String));
+  for (const p of (await gateableProjects()).filter((x) => !wanted.size || wanted.has(String(x.id)))) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const types = await call(route`/rest/api/3/issuetype/project?projectId=${p.id}`);
+      // eslint-disable-next-line no-await-in-loop
+      const r = await call(route`/rest/api/3/workflows?expand=values.transitions`, { projectAndIssueTypes: types.map((t) => ({ projectId: p.id, issueTypeId: t.id })) });
+      const doneRefs = new Set(r.statuses.filter((s) => s.statusCategory === 'DONE').map((s) => s.statusReference));
+      for (const w of r.workflows) {
+        if (w.isEditable === false) continue;
+        const gated = w.transitions.filter((t) => doneRefs.has(t.toStatusReference) && t.type !== 'INITIAL');
+        const missing = gated.filter((t) => !(t.validators || []).some((v) => v.parameters?.key === key));
+        if (missing.length) {
+          for (const t of missing) t.validators = [...(t.validators || []), { ruleKey, parameters: { key, config: '{}', disabled: 'false', tag: '' } }];
+          const statuses = r.statuses.filter((s) => w.statuses.some((x) => x.statusReference === s.statusReference)).map(({ id, name, statusReference, statusCategory, description }) => ({ id, name, statusReference, statusCategory, description }));
+          // eslint-disable-next-line no-await-in-loop
+          await call(route`/rest/api/3/workflows/update`, { statuses, workflows: [{ id: w.id, version: w.version, description: w.description || '', statuses: w.statuses, transitions: w.transitions, ...(w.startPointLayout ? { startPointLayout: w.startPointLayout } : {}) }] });
+        }
+        done.set(w.id, { id: w.id, name: w.name, transitions: gated.length });
+      }
+    } catch (e) {
+      skipped.push(`${p.key}: ${e.message}`);
+    }
+  }
+  const saved = { workflows: [...done.values()], skipped: [...prev.skipped.filter((x) => !skipped.some((y) => y.split(':')[0] === x.split(':')[0])), ...skipped].slice(-20), at: new Date().toISOString() };
+  await kvs.set('meta:doneGate', saved);
+  return saved;
+}
+
+export async function doneGateStatus() {
+  return (await kvs.get('meta:doneGate')) || null;
 }

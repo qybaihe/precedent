@@ -1,1 +1,1 @@
-Ask Precedent hands the context to the Rovo agent. It explains why the decision was made, who to talk to, and the options: comply, log an exception with a reason, or supersede the decision. Every answer cites the decision and its source.
+And it is enforced in the workflow. Moving the work item to Done is blocked while the conflict is unresolved, unless the team reviews it or logs an exception.

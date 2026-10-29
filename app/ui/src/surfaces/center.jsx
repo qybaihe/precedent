@@ -237,8 +237,10 @@ function AgentSetup({ appId, settings }) {
 }
 
 /** Precedent inside Jira's own flows: Create dialog hint, Done gate, Rovo reviewer. */
-function JiraFlows({ createHints }) {
+function JiraFlows({ createHints, doneGate }) {
   const [status, setStatus] = useState(createHints);
+  const [gate, setGate] = useState(doneGate);
+  const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
   return (
     <div className="card pad-lg">
@@ -269,17 +271,43 @@ function JiraFlows({ createHints }) {
           {error ? <div className="mt-8"><Banner tone="error">{error}</Banner></div> : null}
         </div>
         <div>
-          <b>2. Block Done while a conflict is open.</b> In the workflow editor, select the transition to Done → <b>Add rule</b> → <b>Validate details</b> → <i>No unresolved decision conflicts (Precedent)</i>. Reviewed conflicts and logged exceptions pass.
+          <b>2. Block Done while a conflict is open.</b> Adds the validator <i>No unresolved decision conflicts (Precedent)</i> to every transition into a Done status. Reviewed conflicts and logged exceptions pass.{' '}
+          {gate?.workflows?.length ? <span className="pill aligned">{`On in ${plural(gate.workflows.length, 'workflow')}`}</span> : null}
+          <div className="mt-8">
+            <AsyncButton
+              size="sm"
+              icon={gate ? 'refresh' : 'lock'}
+              onClick={async () => {
+                // a few projects per call: each call must finish within the resolver time limit
+                const projects = await invoke('gateableProjects');
+                let r = null;
+                for (let i = 0; i < projects.length; i += 3) {
+                  setProgress(`${Math.min(i + 3, projects.length)} of ${projects.length} projects`);
+                  r = await invoke('enableDoneGate', { projectIds: projects.slice(i, i + 3).map((p) => p.id) });
+                  if (r?.error) break;
+                }
+                setProgress(null);
+                if (r?.error) setError(r.error);
+                else {
+                  setError(null);
+                  setGate(r);
+                }
+              }}
+            >
+              {progress ? `Updating ${progress}…` : gate ? 'Update workflows' : 'Turn on for all workflows'}
+            </AsyncButton>
+          </div>
+          <div className="tiny faint mt-8">Or by hand: workflow editor → transition to Done → Add rule → Validate details.</div>
         </div>
         <div>
-          <b>3. Precedent as a reviewer.</b> In Rovo Studio, open the <b>Precedent</b> agent → Surfaces → turn on <b>Work item</b>. Then assign work items to it, or add <b>Trigger agent action → Precedent</b> to the transition to In Review: it posts a PASS / BLOCKED verdict with the evidence.
+          <b>3. Precedent in Rovo.</b> On any work item, <b>Ask Precedent</b> opens the Precedent agent with the work item as context; it answers with a PASS / BLOCKED verdict, the evidence and the options. Any Rovo Studio agent can use the same tools (Tools → Connected apps → Precedent).
         </div>
       </div>
     </div>
   );
 }
 
-function Setup({ appId, settings, graph, createHints, onLoaded }) {
+function Setup({ appId, settings, graph, createHints, doneGate, onLoaded }) {
   const [setup, setSetup] = useState(null);
   const [space, setSpace] = useState('');
   const [project, setProject] = useState('');
@@ -358,7 +386,7 @@ function Setup({ appId, settings, graph, createHints, onLoaded }) {
       </div>
       <div className="col gap-16">
         <AgentSetup appId={appId} settings={settings} />
-        <JiraFlows createHints={createHints} />
+        <JiraFlows createHints={createHints} doneGate={doneGate} />
         <div className="card pad-lg">
           <div className="row gap-6">
             <Icon name="graph" size={18} style={{ color: 'var(--purple)' }} />
@@ -511,7 +539,7 @@ export default function DecisionCenter() {
               <Empty title="No decisions captured yet">Scan Confluence, write a /decision in any page, or create the sample content below to see Precedent in action.</Empty>
             </div>
           ) : null}
-          <Setup appId={appId} settings={data.settings} graph={data.teamworkGraph} createHints={data.createHints} onLoaded={load} />
+          <Setup appId={appId} settings={data.settings} graph={data.teamworkGraph} createHints={data.createHints} doneGate={data.doneGate} onLoaded={load} />
         </>
       ) : tab === 'inbox' ? (
         <Inbox decisions={decisions} onOpen={setOpenId} onChanged={load} />

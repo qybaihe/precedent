@@ -5,6 +5,8 @@
 import { createPage, createIssue } from './lib/products.js';
 import { harvestConfluencePage } from './lib/harvest.js';
 import { enqueueRecheck } from './lib/checker.js';
+import { listDecisions, saveDecision } from './lib/store.js';
+import { normalizeGuard } from './lib/guard.js';
 
 const text = (t, marks) => ({ type: 'text', text: t, ...(marks ? { marks } : {}) });
 const p = (...content) => ({ type: 'paragraph', content: content.map((c) => (typeof c === 'string' ? text(c) : c)) });
@@ -166,6 +168,20 @@ export async function createSampleData({ spaceId, projectKey }) {
       // eslint-disable-next-line no-await-in-loop
       const r = await harvestConfluencePage(created.id);
       out.decisions += r.created;
+      // the ledger decision gets a guard and its premises, so briefs and agent checks show them
+      // eslint-disable-next-line no-await-in-loop
+      const ledger = (await listDecisions()).find((d) => d.source?.pageId === String(created.id) && /PostgreSQL/.test(d.statement));
+      if (ledger && !ledger.guard) {
+        // eslint-disable-next-line no-await-in-loop
+        await saveDecision({
+          ...ledger,
+          guard: normalizeGuard({ paths: 'services/payments/**, db/ledger/**', packages: { deny: 'mongodb, mongoose, @aws-sdk/client-dynamodb', allow: 'pg, prisma' }, keywords: 'DocumentDB, Cosmos DB' }),
+          assumptions: [
+            { id: 'a-sample-1', text: 'Reconciliation needs multi-row ACID transactions', status: 'holds', addedAt: new Date().toISOString() },
+            { id: 'a-sample-2', text: 'Finance audits the ledger with SQL every night', status: 'holds', addedAt: new Date().toISOString() },
+          ],
+        });
+      }
     }
   }
   if (projectKey) {

@@ -1,1 +1,1 @@
-There is no new process. Teams keep typing slash decision in their meeting notes and decision pages, or start a Jira comment with Decision. Precedent captures every decision, with its owner, date, rationale and source, and shows right on the page which Jira work contradicts it.
+It starts where teams already write. In this architecture review, the payments team decided, with a slash decision, to keep all transactional payment data in PostgreSQL. Precedent captures it with its owner, date and rationale, and the page shows which Jira work contradicts it.

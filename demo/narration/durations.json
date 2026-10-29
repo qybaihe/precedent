@@ -1,74 +1,82 @@
 [
  {
   "scene": 1,
-  "seconds": 19.06,
-  "text": "Every team has had this moment: wait, didn't we already decide not to do that? Decisions live in meeting notes and decision pages. Months later, new work, or an AI coding agent, quietly undoes them. Precedent gives your team, and your agents, a memory of what has already been decided.",
+  "seconds": 14.7,
+  "text": "Every team has had this moment: wait, didn't we already decide not to do that? Precedent is a decision memory that acts. It catches the contradiction in Confluence, in Jira, in your workflow, and in your AI coding agent.",
   "engine": "mimo",
   "voice": "Mia",
-  "qc_wer": 0.0
+  "qc_wer": 0.026
  },
  {
   "scene": 2,
-  "seconds": 16.08,
-  "text": "There is no new process. Teams keep typing slash decision in their meeting notes and decision pages, or start a Jira comment with Decision. Precedent captures every decision, with its owner, date, rationale and source, and shows right on the page which Jira work contradicts it.",
+  "seconds": 16.69,
+  "text": "It starts where teams already write. In this architecture review, the payments team decided, with a slash decision, to keep all transactional payment data in PostgreSQL. Precedent captures it with its owner, date and rationale, and the page shows which Jira work contradicts it.",
+  "engine": "mimo",
+  "voice": "Mia",
+  "qc_wer": 0.068
+ },
+ {
+  "scene": 3,
+  "seconds": 15.67,
+  "text": "Months later, someone files new work: move payout reconciliation to MongoDB. Before they even press create, Jira's own create dialog warns them: already decided in D E C one, with who decided, when, and what to use instead.",
+  "engine": "mimo",
+  "voice": "Mia",
+  "qc_wer": 0.028
+ },
+ {
+  "scene": 4,
+  "seconds": 16.07,
+  "text": "If it is filed anyway, the Precedent panel flags the conflict, quotes the sentence that tripped the guardrail, and offers a one click compliant alternative. Precedent also keeps a short brief for coding agents in the work item: what to do, which packages are denied, and which code the decision governs.",
   "engine": "mimo",
   "voice": "Mia",
   "qc_wer": 0.0
  },
  {
-  "scene": 3,
-  "seconds": 17.74,
-  "text": "Here is a new work item: move the payout ledger to MongoDB. Precedent checked it the moment it was written. It contradicts D E C one: keep all transactional payment data in PostgreSQL. It shows the exact sentence that tripped the guardrail, who decided, when, and where.",
-  "engine": "mimo",
-  "voice": "Mia",
-  "qc_wer": 0.044
- },
- {
-  "scene": 4,
-  "seconds": 19.38,
-  "text": "It works live. Here is a brand new work item: integrate Adyen for EU card payments. The moment it is created, Precedent flags it against the decision to standardize on Stripe, owned by Dana Kim. And it understands direction: removing MongoDB from the refunds service is aligned with the decision, not a conflict.",
-  "engine": "mimo",
-  "voice": "Mia",
-  "qc_wer": 0.057
- },
- {
   "scene": 5,
-  "seconds": 15.1,
-  "text": "Ask Precedent hands the context to the Rovo agent. It explains why the decision was made, who to talk to, and the options: comply, log an exception with a reason, or supersede the decision. Every answer cites the decision and its source.",
+  "seconds": 8.05,
+  "text": "And it is enforced in the workflow. Moving the work item to Done is blocked while the conflict is unresolved, unless the team reviews it or logs an exception.",
   "engine": "mimo",
   "voice": "Mia",
   "qc_wer": 0.0
  },
  {
   "scene": 6,
-  "seconds": 12.02,
-  "text": "Leads get a Decision Radar for every project: the open conflicts, the evidence, and who is affected. And every result is indexed, so precedent conflicts greater than zero works in J Q L, filters and dashboards.",
+  "seconds": 11.65,
+  "text": "Ask Precedent hands the work item to the Rovo agent. It explains why the decision was made, who owns it, and the options: comply, log an exception, or supersede the decision, citing the source every time.",
   "engine": "mimo",
   "voice": "Mia",
-  "qc_wer": 0.0
+  "qc_wer": 0.028
  },
  {
   "scene": 7,
-  "seconds": 18.64,
-  "text": "Precedent also exposes the same actions as MCP tools. Any team can add them to its own agents in Rovo Studio. Here, a custom Architecture Guard agent checks a planned change, finds the decision it would break, and proposes a compliant design instead. An open source skill file brings the same check to coding agents.",
+  "seconds": 8.41,
+  "text": "Now a developer opens the work item in Claude Code, straight from Jira. Jira hands over the summary and the description, and with it, the Precedent brief.",
   "engine": "mimo",
   "voice": "Mia",
-  "qc_wer": 0.055
+  "qc_wer": 0.037
  },
  {
   "scene": 8,
-  "seconds": 11.66,
-  "text": "Everything lives in one decision log, in Confluence and Jira, with editable guardrails, history, exceptions and supersession, plus one click sample content, so a new team sees value in a minute.",
+  "seconds": 19.27,
+  "text": "This is a real Claude Code session with exactly that prompt. Before writing a line of code, the agent stops: the task would break D E C one. It reads the ledger code, explains why the decision exists, and proposes a PostgreSQL JSON B design instead, or an exception for the owner to approve.",
+  "engine": "mimo",
+  "voice": "Mia",
+  "qc_wer": 0.019
+ },
+ {
+  "scene": 9,
+  "seconds": 16.6,
+  "text": "Decisions stay alive. Tripwires watch the assumptions behind them: when shared Redis incidents pile up, the Radar turns red and the owner is asked to review. Meeting notes feed a decision inbox, and Rovo Search finds every decision through the Teamwork Graph.",
   "engine": "mimo",
   "voice": "Mia",
   "qc_wer": 0.0
  },
  {
-  "scene": 9,
-  "seconds": 8.7,
-  "text": "Precedent. One Forge app across Jira, Confluence, Rovo and MCP, so your team, and your agents, know what has already been decided.",
+  "scene": 10,
+  "seconds": 7.21,
+  "text": "Precedent. One Forge app that runs entirely on Atlassian, so your team, and your agents, know what has already been decided.",
   "engine": "mimo",
   "voice": "Mia",
-  "qc_wer": 0.045
+  "qc_wer": 0.0
  }
 ]

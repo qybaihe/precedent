@@ -1,1 +1,1 @@
-Precedent. One Forge app across Jira, Confluence, Rovo and MCP, so your team, and your agents, know what has already been decided.
+Decisions stay alive. Tripwires watch the assumptions behind them: when shared Redis incidents pile up, the Radar turns red and the owner is asked to review. Meeting notes feed a decision inbox, and Rovo Search finds every decision through the Teamwork Graph.

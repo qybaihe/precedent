@@ -27,7 +27,7 @@ import { graphConnections, lastGraphSync } from './lib/graph.js';
 import { normalizeGuard } from './lib/guard.js';
 import { bm25, buildIndex } from './lib/check.js';
 import { buildBrief, briefMarkdown, stripBrief } from './lib/brief.js';
-import { enableCreateHints, createHintsStatus } from './gate.js';
+import { enableCreateHints, createHintsStatus, enableDoneGate, doneGateStatus, gateableProjects } from './gate.js';
 import { createHintFor, createFlagFor } from './lib/hint.js';
 import { normalizeTripwire } from './lib/tripwire.js';
 import { runTripwires } from './tripwires.js';
@@ -110,6 +110,16 @@ resolver.define('createHint', async ({ payload, context }) => {
   const projectKey = context.extension?.project?.key || payload.projectKey;
   const hint = createHintFor(summary, await listDecisions(), projectKey);
   return { hint, flag: createFlagFor(hint) };
+});
+
+resolver.define('gateableProjects', async () => gateableProjects());
+
+resolver.define('enableDoneGate', async ({ payload }) => {
+  try {
+    return await enableDoneGate(payload?.projectIds);
+  } catch (e) {
+    return { error: e.message };
+  }
 });
 
 resolver.define('enableCreateHints', async () => {
@@ -208,7 +218,7 @@ resolver.define('listDecisions', async () => {
 });
 
 resolver.define('getOverview', async () => {
-  const [decisions, checks, settings, base, connections, graphSync, createHints, inbox] = await Promise.all([
+  const [decisions, checks, settings, base, connections, graphSync, createHints, inbox, doneGate] = await Promise.all([
     listDecisions(),
     listChecks(),
     getSettings(),
@@ -217,6 +227,7 @@ resolver.define('getOverview', async () => {
     lastGraphSync(),
     createHintsStatus(),
     listInbox(),
+    doneGateStatus(),
   ]);
   const refs = impactRefs(checks);
   const team = teamHealth(decisions, refs);
@@ -230,6 +241,7 @@ resolver.define('getOverview', async () => {
     siteUrl: base,
     teamworkGraph: { connections: connections.length, lastSync: graphSync },
     createHints,
+    doneGate,
     inboxCount: inbox.reduce((n, e) => n + e.items.length, 0),
   };
 });

@@ -26,6 +26,7 @@ MAX_CHARS = 40
 DISPLAY = [
     ('d e c one', 'DEC-1'),
     ('j q l', 'JQL'),
+    ('json b', 'JSONB'),
     ('slash decision', '/decision'),
     ('precedent conflicts greater than zero', 'precedentConflicts > 0'),
     ('with decision', 'with "Decision:"'),

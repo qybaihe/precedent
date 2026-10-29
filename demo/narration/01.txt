@@ -1,1 +1,1 @@
-Every team has had this moment: wait, didn't we already decide not to do that? Decisions live in meeting notes and decision pages. Months later, new work, or an AI coding agent, quietly undoes them. Precedent gives your team, and your agents, a memory of what has already been decided.
+Every team has had this moment: wait, didn't we already decide not to do that? Precedent is a decision memory that acts. It catches the contradiction in Confluence, in Jira, in your workflow, and in your AI coding agent.
