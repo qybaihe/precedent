@@ -19,9 +19,10 @@ import {
   Banner,
 } from './primitives.jsx';
 import { ImpactBar, ScoreRing } from './charts.jsx';
+import { LineageTimeline } from './lineage.jsx';
 
 const STATUS_OPTIONS = ['active', 'proposed', 'superseded', 'archived'];
-const SIGNAL_ICON = { conflicts: 'alert', exceptions: 'flag', review: 'clock', owner: 'user', guardrails: 'shield', aligned: 'checkCircle' };
+const SIGNAL_ICON = { conflicts: 'alert', exceptions: 'flag', review: 'clock', owner: 'user', guardrails: 'shield', aligned: 'checkCircle', assumption: 'alert' };
 const TONE_COLOR = { danger: 'var(--red)', warning: 'var(--amber)', success: 'var(--green)' };
 
 export function DecisionCard({ decision: d, impact, onOpen, delay = 0 }) {
@@ -33,8 +34,9 @@ export function DecisionCard({ decision: d, impact, onOpen, delay = 0 }) {
           <div className="row gap-6 wrap">
             <DecId id={d.id} />
             <StatusPill status={d.status} />
-            {d.health?.reviewState === 'overdue' && d.status === 'active' ? <Pill tone="overdue" icon="clock">Review overdue</Pill> : null}
-            {d.health?.reviewState === 'soon' && d.status === 'active' ? <Pill tone="soon" icon="clock">Review soon</Pill> : null}
+            {d.health?.outdated?.possibly ? <Pill tone="overdue" icon="clock">Possibly outdated</Pill> : null}
+            {!d.health?.outdated?.possibly && d.health?.reviewState === 'soon' && d.status === 'active' ? <Pill tone="soon" icon="clock">Review soon</Pill> : null}
+            {(d.assumptions || []).length ? <Pill tone="info">{`${d.assumptions.length} assumption${d.assumptions.length > 1 ? 's' : ''}`}</Pill> : null}
           </div>
           <div className="h3 clamp-2">{d.title}</div>
         </div>
@@ -65,7 +67,7 @@ function HealthBreakdown({ health }) {
             <HealthPill health={health} />
           </div>
           <div className="small muted">
-            Review {health.reviewState === 'overdue' ? 'overdue since' : 'due'} {formatDate(health.reviewBy)}
+            Revisit {health.reviewState === 'overdue' ? 'overdue since' : 'by'} {formatDate(health.reviewBy)}
           </div>
         </div>
       </div>
@@ -88,8 +90,100 @@ function HealthBreakdown({ health }) {
 
 const REL_TONE = { conflict: 'conflict', aligned: 'aligned', related: 'related', reviewed: 'reviewed' };
 
-export function DecisionDrawer({ id, onClose, onChanged, rovoOn }) {
+/** Sentences of the rationale that read like premises ("Finance runs SQL audits every night"). */
+function suggestedAssumptions(d) {
+  const tracked = new Set((d.assumptions || []).map((a) => a.text.toLowerCase()));
+  return (d.rationale || '')
+    .split(/(?<=[.!?])\s+/)
+    .map((x) => x.trim().replace(/[.;]$/, ''))
+    .filter((x) => x.length >= 20 && x.length <= 180 && !tracked.has(x.toLowerCase()))
+    .filter((x) => !/^(we|the team)\s+(compared|discussed|looked at|evaluated|reviewed|considered|talked)/i.test(x))
+    .slice(0, 3);
+}
+
+function Assumptions({ decision: d, onSaved }) {
+  const [text, setText] = useState('');
+  const [changing, setChanging] = useState(null);
+  const [note, setNote] = useState('');
+  const call = async (payload) => onSaved(await invoke('updateAssumptions', { id: d.id, ...payload }));
+  const list = d.assumptions || [];
+  const suggestions = suggestedAssumptions(d);
+  return (
+    <div className="col gap-8">
+      {list.map((a) => (
+        <div key={a.id} className={`assumption ${a.status === 'changed' ? 'changed' : ''}`}>
+          <Icon name={a.status === 'changed' ? 'alert' : 'checkCircle'} size={16} style={{ color: a.status === 'changed' ? 'var(--red)' : 'var(--green)', marginTop: 2 }} />
+          <div className="col gap-4">
+            <div className="small" style={{ color: 'var(--text)' }}>{a.text}</div>
+            {a.status === 'changed' ? <div className="tiny" style={{ color: 'var(--red)' }}>No longer holds{a.note ? `: ${a.note}` : ''} · {formatDate(a.changedAt)}</div> : <div className="tiny faint">Holds{a.changedAt ? ` · confirmed ${formatDate(a.changedAt)}` : ''}</div>}
+            {changing === a.id ? (
+              <div className="row gap-6 mt-8">
+                <input className="input" style={{ height: 30 }} placeholder="What changed? (optional)" value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
+                <AsyncButton size="xs" kind="danger" onClick={async () => { await call({ op: 'set', assumptionId: a.id, status: 'changed', note }); setChanging(null); setNote(''); }}>
+                  Mark changed
+                </AsyncButton>
+                <Button size="xs" kind="subtle" onClick={() => setChanging(null)}>Cancel</Button>
+              </div>
+            ) : null}
+          </div>
+          <div className="row gap-4">
+            {a.status === 'changed' ? (
+              <AsyncButton size="xs" icon="check" onClick={() => call({ op: 'set', assumptionId: a.id, status: 'holds' })}>Holds again</AsyncButton>
+            ) : changing !== a.id ? (
+              <Button size="xs" icon="alert" onClick={() => setChanging(a.id)}>It changed</Button>
+            ) : null}
+            <AsyncButton size="xs" kind="subtle" icon="x" title="Stop tracking" onClick={() => call({ op: 'remove', assumptionId: a.id })} />
+          </div>
+        </div>
+      ))}
+      {suggestions.length ? (
+        <div className="col gap-6">
+          <div className="tiny faint">Suggested from the rationale:</div>
+          <div className="row wrap gap-6">
+            {suggestions.map((t) => (
+              <button key={t} className="suggest" onClick={() => call({ op: 'add', text: t })}>
+                <Icon name="plus" size={12} /> {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <div className="row gap-6">
+        <input className="input" style={{ height: 32 }} placeholder="This decision holds while…" value={text} onChange={(e) => setText(e.target.value)} />
+        <AsyncButton size="sm" icon="plus" disabled={text.trim().length < 6} onClick={async () => { await call({ op: 'add', text }); setText(''); }}>
+          Track
+        </AsyncButton>
+      </div>
+    </div>
+  );
+}
+
+function SupersedeForm({ decision: d, onCancel, onDone }) {
+  const [form, setForm] = useState({ statement: '', reason: '' });
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  return (
+    <div className="card flat fade col gap-12" style={{ background: 'var(--purple-bg)', borderColor: 'transparent' }}>
+      <div className="row gap-6"><Icon name="layers" size={16} style={{ color: 'var(--purple)' }} /><span className="strong">{`Supersede ${d.id}`}</span></div>
+      <Field label="The new decision" help="Precedent extracts the new guardrails; work items are re-checked against it.">
+        <textarea className="textarea" value={form.statement} onChange={set('statement')} placeholder="e.g. Keep payment data in PostgreSQL; ledger analytics move to the data warehouse." autoFocus />
+      </Field>
+      <Field label="Why it changed">
+        <input className="input" value={form.reason} onChange={set('reason')} placeholder="e.g. Finance now audits from the warehouse." />
+      </Field>
+      <div className="btn-row">
+        <AsyncButton kind="primary" size="sm" disabled={form.statement.trim().length < 8} onClick={async () => onDone(await invoke('supersede', { id: d.id, ...form }))}>
+          Supersede
+        </AsyncButton>
+        <Button kind="subtle" size="sm" onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+export function DecisionDrawer({ id: initialId, onClose, onChanged, rovoOn }) {
+  const [id, setId] = useState(initialId);
   const [data, setData] = useState(null);
+  const [superseding, setSuperseding] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [note, setNote] = useState(null);
@@ -100,11 +194,13 @@ export function DecisionDrawer({ id, onClose, onChanged, rovoOn }) {
     if (r) {
       const g = r.decision.guardrails || {};
       setForm({
+        title: r.decision.title,
         status: r.decision.status,
         avoid: (g.avoid || []).map((t) => t.text).join(', '),
         prefer: (g.prefer || []).map((t) => t.text).join(', '),
         tags: (r.decision.tags || []).join(', '),
         ownerName: r.decision.owner?.name || '',
+        reviewBy: (r.decision.health?.reviewBy || '').slice(0, 10),
       });
     }
   };
@@ -144,6 +240,28 @@ export function DecisionDrawer({ id, onClose, onChanged, rovoOn }) {
             </header>
             <div className="scroll">
               {note ? <div className="mb-12" style={{ marginBottom: 12 }}><Banner tone={note.tone} title={note.title}>{note.text}</Banner></div> : null}
+              {d.health?.outdated?.possibly ? (
+                <div style={{ marginBottom: 14 }}>
+                  <Banner tone="warning" title="Possibly outdated" icon="clock">
+                    {d.health.outdated.reasons.join(' · ')}. Confirm it with the owner (Still valid), or supersede it.
+                  </Banner>
+                </div>
+              ) : null}
+              {superseding ? (
+                <div style={{ marginBottom: 14 }}>
+                  <SupersedeForm
+                    decision={d}
+                    onCancel={() => setSuperseding(false)}
+                    onDone={async (r) => {
+                      setSuperseding(false);
+                      if (r?.error) return setNote({ tone: 'error', title: 'Could not supersede', text: r.error });
+                      onChanged?.();
+                      flag(`${r.replacement.id} supersedes ${d.id}`, 'Work items are being re-checked against the new decision.');
+                      setId(r.replacement.id);
+                    }}
+                  />
+                </div>
+              ) : null}
               <div className="quote">{d.statement}</div>
               {d.supersededBy ? (
                 <div className="mt-16">
@@ -159,12 +277,30 @@ export function DecisionDrawer({ id, onClose, onChanged, rovoOn }) {
                   <div>{d.rationale}</div>
                 </div>
               ) : null}
+              {d.status === 'active' ? (
+                <div className="section">
+                  <div className="eyebrow">
+                    <Icon name="info" size={13} /> Assumptions <span className="faint" style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>— if one stops holding, the decision is flagged as possibly outdated</span>
+                  </div>
+                  <Assumptions
+                    decision={d}
+                    onSaved={async (saved) => {
+                      if (saved?.error) return setNote({ tone: 'error', title: 'Could not update assumptions', text: saved.error });
+                      await load();
+                      onChanged?.();
+                    }}
+                  />
+                </div>
+              ) : null}
               <div className="section">
                 <div className="eyebrow">
                   <Icon name="shield" size={13} /> Guardrails
                 </div>
                 {editing ? (
                   <div className="col gap-16">
+                    <Field label="Title">
+                      <input className="input" value={form.title} onChange={set('title')} />
+                    </Field>
                     <div className="grid two">
                       <Field label="Avoid">
                         <input className="input" value={form.avoid} onChange={set('avoid')} placeholder="comma separated" />
@@ -187,9 +323,14 @@ export function DecisionDrawer({ id, onClose, onChanged, rovoOn }) {
                         <input className="input" value={form.ownerName} onChange={set('ownerName')} />
                       </Field>
                     </div>
-                    <Field label="Tags" help="Curated guardrails are kept even when the source page changes.">
-                      <input className="input" value={form.tags} onChange={set('tags')} />
-                    </Field>
+                    <div className="grid two">
+                      <Field label="Tags" help="Curated guardrails are kept even when the source page changes.">
+                        <input className="input" value={form.tags} onChange={set('tags')} />
+                      </Field>
+                      <Field label="Revisit by" help="After this date the decision is flagged as possibly outdated until someone confirms it.">
+                        <input className="input" type="date" value={form.reviewBy} onChange={set('reviewBy')} />
+                      </Field>
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -244,15 +385,9 @@ export function DecisionDrawer({ id, onClose, onChanged, rovoOn }) {
               ) : null}
               <div className="section">
                 <div className="eyebrow">
-                  <Icon name="timeline" size={13} /> History
+                  <Icon name="timeline" size={13} /> Lineage
                 </div>
-                <ul className="steps">
-                  {(d.history || []).map((h, i) => (
-                    <li key={`${h.at}-${i}`} className="small">
-                      <span className="faint">{formatDate(h.at)}</span> — {h.what}
-                    </li>
-                  ))}
-                </ul>
+                <LineageTimeline decision={d} onOpen={(x) => setId(x)} />
               </div>
             </div>
             <footer>
@@ -264,7 +399,8 @@ export function DecisionDrawer({ id, onClose, onChanged, rovoOn }) {
                   <AsyncButton
                     kind="primary"
                     onClick={async () => {
-                      await invoke('updateDecision', { id: d.id, patch: form });
+                      const unchanged = form.reviewBy === (d.health?.reviewBy || '').slice(0, 10);
+                      await invoke('updateDecision', { id: d.id, patch: { ...form, reviewBy: unchanged ? undefined : form.reviewBy } });
                       setEditing(false);
                       await load();
                       onChanged?.();
@@ -306,6 +442,11 @@ export function DecisionDrawer({ id, onClose, onChanged, rovoOn }) {
                     >
                       Still valid
                     </AsyncButton>
+                  ) : null}
+                  {d.status === 'active' && !superseding ? (
+                    <Button icon="layers" onClick={() => setSuperseding(true)}>
+                      Supersede
+                    </Button>
                   ) : null}
                   <Button icon="edit" onClick={() => setEditing(true)}>
                     Edit

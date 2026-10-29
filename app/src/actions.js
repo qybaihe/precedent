@@ -8,7 +8,9 @@ import { bm25, buildIndex } from './lib/check.js';
 import { listDecisions, getDecision, createDecision, saveDecision, listChecks, getCheck, saveCheck } from './lib/store.js';
 import { siteUrl } from './lib/products.js';
 import { snippet } from './lib/text.js';
+import { titleFrom } from './lib/adf.js';
 import { suggestFix } from './lib/fix.js';
+import { outdated, reviewDate } from './lib/health.js';
 
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 
@@ -26,6 +28,11 @@ function brief(d) {
     prefer: (d.guardrails?.prefer || []).map((t) => t.text),
     linkedWorkItems: d.links || [],
     supersededBy: d.supersededBy || null,
+    supersedes: d.supersedes || null,
+    assumptions: (d.assumptions || []).map((a) => ({ text: a.text, stillHolds: a.status !== 'changed', note: a.note || null })),
+    revisitBy: reviewDate(d)?.slice(0, 10) || null,
+    possiblyOutdated: outdated(d).possibly,
+    outdatedBecause: outdated(d).reasons,
   };
 }
 
@@ -56,11 +63,12 @@ function describeCheck(r) {
       evidence: c.evidence,
       alreadyReviewed: Boolean(c.acknowledged),
       compliantAlternative: c.fix ? { advice: c.fix.advice, use: c.fix.to || null, insteadOf: c.fix.from || null } : null,
+      decisionPossiblyOutdated: c.outdated || null,
     })),
     aligned: r.aligned.map((a) => ({ decision: brief(a.decision), why: a.reason })),
     related: r.related.map((x) => ({ decision: brief(x.decision), sharedTopics: x.overlap })),
     guidance:
-      'Cite decision ids and source links. Lead with the compliant alternative when one is given. If the work must go ahead anyway, suggest either logging an exception (log-exception) or superseding the decision (supersede-decision) with the owner involved.',
+      'Cite decision ids and source links. Lead with the compliant alternative when one is given. If a decision is possiblyOutdated, say why (outdatedBecause) and suggest confirming with the owner or superseding it rather than blindly complying. If the work must go ahead anyway, suggest either logging an exception (log-exception) or superseding the decision (supersede-decision) with the owner involved.',
   };
 }
 
@@ -114,6 +122,8 @@ export async function checkWorkItem(payload) {
     const d = decisions.find((x) => x.id === c.decision.id);
     const f = d ? suggestFix({ summary: text, description: '' }, c, d) : null;
     if (f) c.fix = { kind: f.kind, from: f.from, to: f.to, advice: f.advice };
+    const stale = d ? outdated(d) : null;
+    if (stale?.possibly) c.outdated = stale.reasons;
   }
   return { plan: snippet(text, 200), ...describeCheck(r) };
 }
@@ -126,7 +136,7 @@ export async function recordDecision(payload, context) {
   const base = await siteUrl();
   const decision = await createDecision(
     {
-      title: String(payload.title || '').trim() || statement.split(/(?<=[.!?;])\s/)[0].replace(/[.;]$/, '').slice(0, 90),
+      title: String(payload.title || '').trim() || titleFrom(statement),
       statement,
       rationale: String(payload.rationale || '').trim(),
       owner: payload.ownerName ? { name: String(payload.ownerName) } : null,
@@ -158,14 +168,14 @@ export async function supersedeDecision(payload, context) {
   const now = new Date().toISOString();
   const next = await createDecision(
     {
-      title: String(payload.title || '').trim() || statement.split(/(?<=[.!?;])\s/)[0].replace(/[.;]$/, '').slice(0, 90),
+      title: String(payload.title || '').trim() || titleFrom(statement),
       statement,
       rationale: String(payload.reason || '').trim(),
       tags: old.tags || [],
       scope: old.scope,
       supersedes: old.id,
       createdBy: actor(context),
-      source: { type: 'rovo', label: 'Rovo', kind: `Supersedes ${old.id}`, title: old.source?.title || old.title, url: old.source?.url },
+      source: { type: payload.via ? 'manual' : 'rovo', label: payload.via || 'Rovo', kind: `Supersedes ${old.id}`, title: old.source?.title || old.title, url: old.source?.url },
     },
     { avoid: payload.avoid, prefer: payload.prefer },
   );
@@ -174,7 +184,7 @@ export async function supersedeDecision(payload, context) {
     status: 'superseded',
     statusLocked: true,
     supersededBy: next.id,
-    history: [...(old.history || []), { at: now, what: `Superseded by ${next.id}: ${String(payload.reason || '').trim()}` }],
+    history: [...(old.history || []), { at: now, kind: 'superseded', what: `Superseded by ${next.id}: ${String(payload.reason || '').trim()}` }],
   });
   await enqueueRecheck();
   return { superseded: old.id, replacement: brief(next) };
@@ -192,7 +202,7 @@ export async function logException(payload, context) {
     ...d,
     exceptions: [...(d.exceptions || []).filter((e) => e.issueKey !== issueKey), { issueKey, reason, by: actor(context), at: now }],
     links: [...new Set([...(d.links || []), issueKey])],
-    history: [...(d.history || []), { at: now, what: `Exception logged for ${issueKey}: ${reason}` }],
+    history: [...(d.history || []), { at: now, kind: 'exception', what: `Exception logged for ${issueKey}: ${reason}` }],
   });
   const r = await checkIssue(issueKey);
   return { decision: d.id, workItem: issueKey, exception: reason, newVerdict: r.status };

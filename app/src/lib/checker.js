@@ -5,6 +5,7 @@ import { Queue } from '@forge/events';
 import { checkWork } from './check.js';
 import { suggestFix } from './fix.js';
 import { adfToText } from './adf.js';
+import { outdated } from './health.js';
 import { getIssue, issueText, issueMeta, setIssueProperty, siteUrl, searchIssues } from './products.js';
 import { listDecisions, getCheck, saveCheck, listChecks, deleteCheck } from './store.js';
 
@@ -32,6 +33,8 @@ function attachFixes(result, issue, decisions) {
   for (const c of result.conflicts) {
     const d = decisions.find((x) => x.id === c.decision.id);
     if (!d) continue;
+    const stale = outdated(d);
+    if (stale.possibly) c.outdated = stale.reasons;
     try {
       const f = suggestFix(work, c, d);
       if (!f) continue;

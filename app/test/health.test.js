@@ -30,7 +30,7 @@ test('review date: explicit, else last review / decision / creation + 180 days',
 
 test('a well-kept decision is healthy, and followed work shows as a success signal', () => {
   const h = decisionHealth(decision(), undefined, NOW);
-  assert.deepEqual(h, { score: 100, grade: 'healthy', reviewBy: '2027-02-28T00:00:00.000Z', reviewState: 'ok', signals: [] });
+  assert.deepEqual(h, { score: 100, grade: 'healthy', reviewBy: '2027-02-28T00:00:00.000Z', reviewState: 'ok', signals: [], outdated: { possibly: false, reasons: [] } });
   const followed = decisionHealth(decision(), { conflicts: 0, aligned: 4, related: 2 }, NOW);
   assert.equal(followed.score, 100);
   assert.deepEqual(followed.signals, [{ kind: 'aligned', tone: 'success', label: '4 work items follow it', impact: 0 }]);
@@ -115,7 +115,7 @@ test('grades: 80 healthy, 55 watch, below that at risk', () => {
 
 test('inactive decisions are not scored or penalised', () => {
   const h = decisionHealth(decision({ status: 'superseded', owner: null, reviewBy: '2025-01-01' }), { conflicts: 4 }, NOW);
-  assert.deepEqual(h, { score: null, grade: 'inactive', reviewBy: '2025-01-01T00:00:00.000Z', reviewState: 'ok', signals: [] });
+  assert.deepEqual(h, { score: null, grade: 'inactive', reviewBy: '2025-01-01T00:00:00.000Z', reviewState: 'ok', signals: [], outdated: { possibly: false, reasons: [] } });
 });
 
 test('team health averages active decisions', () => {
@@ -136,5 +136,34 @@ test('team health averages active decisions', () => {
   assert.deepEqual(Object.keys(t.byId), ['DEC-1', 'DEC-2', 'DEC-3', 'DEC-4', 'DEC-5']);
 
   const empty = teamHealth([], {}, NOW);
-  assert.deepEqual(empty, { score: 100, grade: 'healthy', active: 0, healthy: 0, watch: 0, atRisk: 0, overdue: 0, dueSoon: 0, byId: {} });
+  assert.deepEqual(empty, { score: 100, grade: 'healthy', active: 0, healthy: 0, watch: 0, atRisk: 0, overdue: 0, dueSoon: 0, outdated: 0, byId: {} });
+});
+
+test('a changed assumption makes a decision possibly outdated and costs health', () => {
+  const now = new Date('2026-10-29T12:00:00Z');
+  const base = {
+    id: 'DEC-1',
+    status: 'active',
+    owner: { name: 'Priya Shah' },
+    decidedAt: '2026-09-01T00:00:00.000Z',
+    guardrails: { avoid: [{ text: 'MongoDB' }], prefer: [] },
+    assumptions: [{ id: 'a1', text: 'Finance audits the ledger with SQL every night', status: 'holds' }],
+  };
+  const fine = decisionHealth(base, undefined, now);
+  assert.equal(fine.score, 100);
+  assert.equal(fine.outdated.possibly, false);
+
+  const changed = { ...base, assumptions: [{ ...base.assumptions[0], status: 'changed', note: 'audits moved to the warehouse' }] };
+  const h = decisionHealth(changed, undefined, now);
+  assert.equal(h.score, 75);
+  assert.equal(h.signals[0].kind, 'assumption');
+  assert.equal(h.outdated.possibly, true);
+  assert.match(h.outdated.reasons[0], /no longer holds: “Finance audits the ledger with SQL every night” \(audits moved to the warehouse\)/);
+
+  // past its revisit date counts as possibly outdated too; superseded decisions never are
+  const overdue = decisionHealth({ ...base, reviewBy: '2026-10-01T00:00:00.000Z' }, undefined, now);
+  assert.equal(overdue.outdated.possibly, true);
+  assert.match(overdue.outdated.reasons[0], /revisit date, Oct 1, 2026/);
+  assert.equal(decisionHealth({ ...changed, status: 'superseded' }, undefined, now).outdated.possibly, false);
+  assert.equal(teamHealth([changed, base], {}, now).outdated, 1);
 });

@@ -19,6 +19,8 @@ const PENALTY = {
   soon: 5,
   owner: 10,
   guardrails: 10,
+  assumption: 25,
+  assumptionMax: 40,
 };
 
 /** 'Mar 12, 2026'; date-only values (UTC midnight) keep their calendar day, like the UI's formatDate. */
@@ -53,15 +55,32 @@ export function gradeFor(score) {
   return 'at-risk';
 }
 
+/** Assumptions the decision was made under that the team has marked as no longer true. */
+export function changedAssumptions(decision) {
+  return (decision?.assumptions || []).filter((a) => a?.status === 'changed');
+}
+
 /**
- * decisionHealth(decision, impact, now) -> { score, grade, reviewBy, reviewState, signals }
+ * Is the decision possibly outdated? It is when a premise it rests on changed, or when nobody has
+ * confirmed it by its revisit date. Returns { possibly, reasons: [string] }.
+ */
+export function outdated(decision, now = new Date()) {
+  if (decision?.status && decision.status !== 'active') return { possibly: false, reasons: [] };
+  const reasons = changedAssumptions(decision).map((a) => `Assumption no longer holds: “${a.text}”${a.note ? ` (${a.note})` : ''}`);
+  const due = toTime(reviewDate(decision));
+  if (due !== null && due < new Date(now).getTime()) reasons.push(`Not reconfirmed since its revisit date, ${formatDate(new Date(due).toISOString())}`);
+  return { possibly: reasons.length > 0, reasons };
+}
+
+/**
+ * decisionHealth(decision, impact, now) -> { score, grade, reviewBy, reviewState, signals, outdated }
  * `impact` counts the work items currently conflicting with / aligned with / related to it.
  * Inactive decisions (superseded, archived, proposed) are not scored.
  */
 export function decisionHealth(decision, impact = { conflicts: 0, aligned: 0, related: 0 }, now = new Date()) {
   const reviewBy = reviewDate(decision);
   if (decision?.status && decision.status !== 'active') {
-    return { score: null, grade: 'inactive', reviewBy, reviewState: 'ok', signals: [] };
+    return { score: null, grade: 'inactive', reviewBy, reviewState: 'ok', signals: [], outdated: { possibly: false, reasons: [] } };
   }
 
   const nowMs = new Date(now).getTime();
@@ -82,6 +101,11 @@ export function decisionHealth(decision, impact = { conflicts: 0, aligned: 0, re
     const label = `${plural(exceptions, 'exception', 'exceptions')} in ${EXCEPTION_WINDOW_DAYS} days${exceptions > 1 ? ' — the rule may be bending' : ''}`;
     add('exceptions', 'warning', label, -Math.min(PENALTY.exceptionMax, exceptions * PENALTY.exception));
   }
+
+  const changed = changedAssumptions(decision);
+  changed.forEach((a, i) =>
+    add('assumption', 'danger', `Assumption no longer holds: “${a.text}”`, -(i ? Math.max(0, PENALTY.assumptionMax - PENALTY.assumption) / (changed.length - 1) : PENALTY.assumption)),
+  );
 
   let reviewState = 'ok';
   const reviewMs = toTime(reviewBy);
@@ -109,7 +133,7 @@ export function decisionHealth(decision, impact = { conflicts: 0, aligned: 0, re
   const score = Math.round(Math.max(0, Math.min(100, 100 + signals.reduce((n, s) => n + s.impact, 0))));
   // most negative first; the sort is stable so equal penalties keep the order above
   signals.sort((a, b) => a.impact - b.impact);
-  return { score, grade: gradeFor(score), reviewBy, reviewState, signals };
+  return { score, grade: gradeFor(score), reviewBy, reviewState, signals, outdated: outdated(decision, now) };
 }
 
 /**
@@ -119,7 +143,7 @@ export function decisionHealth(decision, impact = { conflicts: 0, aligned: 0, re
 export function teamHealth(decisions, refs = {}, now = new Date()) {
   const byId = {};
   const scored = [];
-  const totals = { healthy: 0, watch: 0, atRisk: 0, overdue: 0, dueSoon: 0 };
+  const totals = { healthy: 0, watch: 0, atRisk: 0, overdue: 0, dueSoon: 0, outdated: 0 };
   for (const d of decisions || []) {
     if (!d?.id) continue;
     const health = decisionHealth(d, refs?.[d.id] || undefined, now);
@@ -131,6 +155,7 @@ export function teamHealth(decisions, refs = {}, now = new Date()) {
     else totals.atRisk++;
     if (health.reviewState === 'overdue') totals.overdue++;
     if (health.reviewState === 'soon') totals.dueSoon++;
+    if (health.outdated.possibly) totals.outdated++;
   }
   const score = scored.length ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : 100;
   return { score, grade: gradeFor(score), active: scored.length, ...totals, byId };

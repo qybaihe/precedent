@@ -120,6 +120,24 @@ modules:
         - supersede-decision
         - log-exception
         - list-conflicts
+  # ---------------- Teamwork Graph ----------------
+  graph:connector:
+    - key: precedent-decisions-connector
+      name: Precedent decisions
+      icons:
+        light: resource:icons;precedent.svg
+        dark: resource:icons;precedent.svg
+      objectTypes:
+        - atlassian:document
+      capabilities:
+        # the graph copy is visible site-wide, exactly like the Decision Log it mirrors
+        replicatesPermissions: false
+        syncFidelity: upsert
+        supportsIncrementalSync: true
+      datasource:
+        onConnectionChange:
+          function: twg-connection-change
+
   rovo:mcp:
     - key: precedent-mcp
       name: Precedent decisions
@@ -306,6 +324,8 @@ modules:
           description: Jira project key such as PAY. Leave empty for the whole site.
 
   function:
+    - key: twg-connection-change
+      handler: index.onConnectionChange
     - key: resolver
       handler: index.handler
     - key: issue-context-status
@@ -361,5 +381,8 @@ permissions:
     - read:page:confluence
     - write:page:confluence
     - write:comment:confluence
+    - write:object:jira
+    - read:object:jira
+    - delete:object:jira
     - read:space:confluence
     - read:label:confluence

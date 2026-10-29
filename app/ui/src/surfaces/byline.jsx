@@ -17,6 +17,7 @@ function Tracked({ item, delay }) {
             <DecId id={d.id} />
             <StatusPill status={d.status} />
             {conflicts.length ? <Pill tone="conflict" icon="alert">{plural(conflicts.length, 'conflict')}</Pill> : null}
+            {d.health?.outdated?.possibly ? <Pill tone="overdue" icon="clock">possibly outdated</Pill> : null}
           </div>
           <div className="strong">{d.title}</div>
         </div>

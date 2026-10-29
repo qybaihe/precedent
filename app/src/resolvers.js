@@ -15,7 +15,7 @@ import {
   getSettings,
   saveSettings,
 } from './lib/store.js';
-import { acknowledge, logException } from './actions.js';
+import { acknowledge, logException, supersedeDecision } from './actions.js';
 import { listProjects, listSpaces, userCanBrowse, userCanEdit, siteUrl, getIssue, updateIssue, addComment, getPage, addPageComment } from './lib/products.js';
 import { createSampleData } from './sample.js';
 import { applyReplacementsToAdf, applyReplacementsToText, preferredAlternative } from './lib/fix.js';
@@ -23,6 +23,7 @@ import { findDecisionCandidates } from './lib/extract.js';
 import { decisionHealth, teamHealth, REVIEW_DAYS } from './lib/health.js';
 import { dateFromTitle } from './lib/adf.js';
 import { pageUrl } from './lib/harvest.js';
+import { graphConnections, lastGraphSync } from './lib/graph.js';
 
 const resolver = new Resolver();
 
@@ -49,7 +50,7 @@ function slimCheck(c) {
     issue: c.issue,
     status: c.status,
     checkedAt: c.checkedAt,
-    conflicts: c.conflicts.map((x) => ({ decision: ref(x), terms: x.terms, evidence: x.evidence, acknowledged: x.acknowledged, fix: x.fix || null })),
+    conflicts: c.conflicts.map((x) => ({ decision: ref(x), terms: x.terms, evidence: x.evidence, acknowledged: x.acknowledged, fix: x.fix || null, outdated: x.outdated || null })),
     aligned: c.aligned.map((x) => ({ decision: ref(x), reason: x.reason })),
     related: c.related.map((x) => ({ decision: ref(x) })),
   };
@@ -162,7 +163,14 @@ resolver.define('listDecisions', async () => {
 });
 
 resolver.define('getOverview', async () => {
-  const [decisions, checks, settings, base] = await Promise.all([listDecisions(), listChecks(), getSettings(), siteUrl().catch(() => '')]);
+  const [decisions, checks, settings, base, connections, graphSync] = await Promise.all([
+    listDecisions(),
+    listChecks(),
+    getSettings(),
+    siteUrl().catch(() => ''),
+    graphConnections(),
+    lastGraphSync(),
+  ]);
   const refs = impactRefs(checks);
   const team = teamHealth(decisions, refs);
   const { byId, ...summary } = team;
@@ -173,7 +181,13 @@ resolver.define('getOverview', async () => {
     team: summary,
     settings: { ...settings, reviewDays: REVIEW_DAYS },
     siteUrl: base,
+    teamworkGraph: { connections: connections.length, lastSync: graphSync },
   };
+});
+
+resolver.define('syncGraph', async () => {
+  await jobs.push({ body: { type: 'graph-sync' } });
+  return { queued: true };
 });
 
 resolver.define('reviewDecision', async ({ payload, context }) => {
@@ -184,8 +198,9 @@ resolver.define('reviewDecision', async ({ payload, context }) => {
     ...d,
     reviewedAt: now.toISOString(),
     reviewBy: new Date(now.getTime() + REVIEW_DAYS * 86400000).toISOString(),
-    history: [...(d.history || []), { at: now.toISOString(), what: 'Reviewed: still valid', by: context.accountId }],
+    history: [...(d.history || []), { at: now.toISOString(), kind: 'review', what: 'Reviewed: still valid', by: context.accountId }],
   });
+  await jobs.push({ body: { type: 'graph-sync' } }).catch(() => {});
   return saved;
 });
 
@@ -208,8 +223,49 @@ resolver.define('remindOwner', async ({ payload, context }) => {
   } catch (e) {
     return { posted: false, error: e.message.slice(0, 200) };
   }
-  await saveDecision({ ...d, history: [...(d.history || []), { at: new Date().toISOString(), what: `Review reminder sent to ${d.owner?.name || 'the owner'}`, by: context.accountId }] });
+  await saveDecision({ ...d, history: [...(d.history || []), { at: new Date().toISOString(), kind: 'reminder', what: `Review reminder sent to ${d.owner?.name || 'the owner'}`, by: context.accountId }] });
   return { posted: true, where };
+});
+
+// Assumptions: what has to stay true for the decision to keep making sense ("Finance audits the
+// ledger with SQL"). When one stops holding, the decision is flagged as possibly outdated.
+resolver.define('updateAssumptions', async ({ payload, context }) => {
+  const d = await getDecision(payload.id);
+  if (!d) return null;
+  const now = new Date().toISOString();
+  const list = [...(d.assumptions || [])];
+  const event = (what) => ({ at: now, kind: 'assumption', what, by: context.accountId });
+  const history = [...(d.history || [])];
+  if (payload.op === 'add') {
+    const text = String(payload.text || '').trim().replace(/\s+/g, ' ').slice(0, 300);
+    if (text.length < 6) return { error: 'Describe the assumption in a few words.' };
+    list.push({ id: `a${Date.now().toString(36)}`, text, status: 'holds', addedAt: now, by: context.accountId });
+    history.push(event(`Assumption tracked: “${text}”`));
+  } else {
+    const i = list.findIndex((a) => a.id === payload.assumptionId);
+    if (i < 0) return { error: 'Assumption not found' };
+    const a = list[i];
+    if (payload.op === 'remove') {
+      list.splice(i, 1);
+      history.push(event(`Assumption removed: “${a.text}”`));
+    } else if (payload.op === 'set' && ['holds', 'changed'].includes(payload.status)) {
+      const note = String(payload.note || '').trim().slice(0, 200);
+      list[i] = { ...a, status: payload.status, changedAt: now, note: payload.status === 'changed' ? note : '' };
+      history.push(event(payload.status === 'changed' ? `Assumption no longer holds: “${a.text}”${note ? ` — ${note}` : ''}` : `Assumption confirmed: “${a.text}”`));
+    }
+  }
+  const saved = await saveDecision({ ...d, assumptions: list, history });
+  await jobs.push({ body: { type: 'graph-sync' } }).catch(() => {});
+  const checks = await listChecks();
+  return { ...saved, health: decisionHealth(saved, impactRefs(checks)[saved.id]) };
+});
+
+resolver.define('supersede', async ({ payload, context }) => {
+  const r = await supersedeDecision(
+    { decisionId: payload.id, newStatement: payload.statement, reason: payload.reason, title: payload.title, avoid: payload.avoid, prefer: payload.prefer, via: 'Precedent' },
+    { accountId: context.accountId },
+  );
+  return r;
 });
 
 resolver.define('getDecision', async ({ payload }) => {
@@ -244,10 +300,15 @@ resolver.define('updateDecision', async ({ payload, context }) => {
     ...(patch.tags !== undefined ? { tags: patch.tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) } : {}),
     ...(patch.ownerName !== undefined ? { owner: patch.ownerName ? { ...(d.owner || {}), name: patch.ownerName } : null } : {}),
   };
+  if (patch.reviewBy !== undefined) {
+    const at = patch.reviewBy ? new Date(patch.reviewBy) : null;
+    next.reviewBy = at && !Number.isNaN(at.getTime()) ? at.toISOString() : undefined;
+    next.history = [...(next.history || []), { at: now, kind: 'review', what: next.reviewBy ? `Revisit date set to ${next.reviewBy.slice(0, 10)}` : 'Revisit date cleared', by: context.accountId }];
+  }
   if (patch.status && patch.status !== d.status) {
     next.status = patch.status;
     next.statusLocked = true;
-    next.history = [...(d.history || []), { at: now, what: `Status changed to ${patch.status}`, by: context.accountId }];
+    next.history = [...(next.history || []), { at: now, kind: 'status', what: `Status changed to ${patch.status}`, by: context.accountId }];
   }
   if (patch.avoid !== undefined || patch.prefer !== undefined || patch.statement !== undefined) {
     next = withGuardrails(next, {

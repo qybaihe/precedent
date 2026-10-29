@@ -176,6 +176,10 @@ function summarizeDecision(d) {
     source: d.source || null,
     tags: d.tags || [],
     guardrails: d.guardrails || { avoid: [], prefer: [] },
+    // what decides "possibly outdated" for agents and the issue panel
+    reviewBy: d.reviewBy || null,
+    reviewedAt: d.reviewedAt || null,
+    assumptions: d.assumptions || [],
   };
 }
 

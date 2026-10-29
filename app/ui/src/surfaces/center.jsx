@@ -6,8 +6,9 @@ import { Icon, Logo } from '../components/icons.jsx';
 import { AsyncButton, Banner, Button, DecId, Empty, Field, Kpi, Segmented, Spinner, Tabs, plural } from '../components/primitives.jsx';
 import { DecisionMap, Gauge, GRADE_COLOR, Heatmap, Lifecycle } from '../components/charts.jsx';
 import { DecisionCard, DecisionDrawer } from '../components/decision.jsx';
+import { ChangeFeed } from '../components/lineage.jsx';
 
-const SIGNAL_ICON = { conflicts: 'alert', exceptions: 'flag', review: 'clock', owner: 'user', guardrails: 'shield' };
+const SIGNAL_ICON = { conflicts: 'alert', exceptions: 'flag', review: 'clock', owner: 'user', guardrails: 'shield', assumption: 'alert' };
 
 function NeedsAttention({ decisions, onOpen, onReviewed }) {
   const list = decisions
@@ -99,7 +100,7 @@ function ConflictHeatmap({ decisions, checks, siteUrl, onOpen }) {
   );
 }
 
-function Setup({ appId, settings, onLoaded }) {
+function Setup({ appId, settings, graph, onLoaded }) {
   const [setup, setSetup] = useState(null);
   const [space, setSpace] = useState('');
   const [project, setProject] = useState('');
@@ -187,6 +188,28 @@ function Setup({ appId, settings, onLoaded }) {
           </div>
           <div className="code mt-12">{`claude mcp add --transport http precedent https://mcp.atlassian.com/forge/${appId || APP_ID}`}</div>
           <div className="tiny faint mt-8">search-decisions · get-decision · check-work-item · record-decision · supersede-decision · log-exception · list-conflicts</div>
+        </div>
+        <div className="card pad-lg">
+          <div className="row gap-6">
+            <Icon name="graph" size={18} style={{ color: 'var(--purple)' }} />
+            <div className="h2">Teamwork Graph</div>
+            {graph?.connections ? <span className="pill aligned">Connected</span> : <span className="pill">Not connected</span>}
+          </div>
+          <div className="small muted mt-8">
+            Every decision is published to Atlassian's Teamwork Graph as a document (statement, owner, guardrails, assumptions and the work that contradicts it), so Rovo Search and any agent on the graph can find it. Data never leaves Atlassian.
+          </div>
+          {graph?.connections ? (
+            <div className="small mt-12">
+              {graph.lastSync ? `Last sync ${new Date(graph.lastSync.at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}: ${graph.lastSync.accepted} of ${graph.lastSync.objects} decisions accepted.` : 'Waiting for the first sync.'}
+              <div className="mt-8">
+                <AsyncButton size="sm" icon="refresh" onClick={() => invoke('syncGraph')}>
+                  Sync now
+                </AsyncButton>
+              </div>
+            </div>
+          ) : (
+            <div className="small mt-12">An org admin connects it once: Atlassian Administration → Apps → Sites → your site → Connected apps → Precedent → <b>Connections</b> → Teamwork Graph connectors → <b>Connect</b>.</div>
+          )}
         </div>
         <div className="card pad-lg">
           <div className="row gap-6">
@@ -295,7 +318,7 @@ export default function DecisionCenter() {
         <Kpi label="Active decisions" value={active.length} hint={`${decisions.length - active.length} superseded or archived`} accent="related" delay={40} />
         <Kpi label="Open conflicts" value={openConflicts} tone={openConflicts ? 'danger' : 'success'} accent={openConflicts ? 'conflict' : 'aligned'} hint={openConflicts ? 'work items contradicting decisions' : 'nothing contradicts a decision'} delay={80} />
         <Kpi label="Work items aligned" value={aligned} tone={aligned ? 'success' : ''} accent="aligned" hint="removing or replacing what a decision rules out" delay={120} />
-        <Kpi label="Due for review" value={team.overdue + team.dueSoon} tone={team.overdue ? 'warning' : ''} accent="reviewed" hint={team.overdue ? `${team.overdue} overdue` : 'all reviews on schedule'} delay={160} />
+        <Kpi label="Possibly outdated" value={team.outdated} tone={team.outdated ? 'warning' : 'success'} accent="reviewed" hint={team.outdated ? 'an assumption changed or the revisit date passed' : 'every decision confirmed and current'} delay={160} />
         <Kpi label="From Confluence" value={decisions.filter((d) => d.source?.type === 'confluence').length} accent="superseded" hint="captured where teams already write" delay={200} />
       </div>
 
@@ -317,7 +340,7 @@ export default function DecisionCenter() {
               <Empty title="No decisions captured yet">Scan Confluence, write a /decision in any page, or create the sample content below to see Precedent in action.</Empty>
             </div>
           ) : null}
-          <Setup appId={appId} settings={data.settings} onLoaded={load} />
+          <Setup appId={appId} settings={data.settings} graph={data.teamworkGraph} onLoaded={load} />
         </>
       ) : tab === 'overview' ? (
         <div className="col gap-16">
@@ -352,6 +375,16 @@ export default function DecisionCenter() {
               <Icon name="timeline" size={18} className="faint" />
             </div>
             <Lifecycle decisions={decisions} checks={checks} onSelect={setOpenId} />
+          </div>
+          <div className="card pad-lg rise" style={{ animationDelay: '160ms' }}>
+            <div className="card-title">
+              <div>
+                <div className="h2">What changed</div>
+                <div className="small faint">Supersessions, exceptions, assumptions that stopped holding, and reviews: the decision register's audit trail.</div>
+              </div>
+              <Icon name="layers" size={18} className="faint" />
+            </div>
+            <ChangeFeed decisions={decisions} onOpen={setOpenId} />
           </div>
         </div>
       ) : tab === 'decisions' ? (

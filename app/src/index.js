@@ -11,3 +11,4 @@ export {
   listConflicts,
 } from './actions.js';
 export { selftest } from './selftest.js';
+export { onConnectionChange } from './lib/graph.js';

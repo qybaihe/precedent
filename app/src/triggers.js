@@ -2,8 +2,10 @@
 
 import { checkIssue, recheck, enqueueRecheck, jobs } from './lib/checker.js';
 import { harvestConfluencePage, harvestJiraComment } from './lib/harvest.js';
-import { getSettings, deleteCheck } from './lib/store.js';
-import { recentPageIds } from './lib/products.js';
+import { getSettings, deleteCheck, listDecisions, listChecks } from './lib/store.js';
+import { recentPageIds, siteUrl } from './lib/products.js';
+import { syncDecisionsToGraph } from './lib/graph.js';
+import { getAppContext } from '@forge/api';
 
 const CONTENT_FIELDS = new Set(['summary', 'description', 'labels', 'components', 'Component']);
 
@@ -49,12 +51,27 @@ export async function onConfluencePage(event) {
   if (r.created || r.archived || r.updated) await enqueueRecheck();
 }
 
+async function syncGraph() {
+  try {
+    const [decisions, checks, base] = await Promise.all([listDecisions(), listChecks(), siteUrl()]);
+    const app = getAppContext();
+    const logUrl = `${base}/jira/apps/${app.appAri.appId}/${app.environmentAri.environmentId}`;
+    await syncDecisionsToGraph(decisions, checks, { logUrl });
+  } catch (e) {
+    console.warn(`teamwork graph sync failed: ${e.message}`);
+  }
+}
+
 /** Async job consumer (queue: precedent-jobs). */
 export async function runJob(event) {
   const body = event.body || {};
   if (body.type === 'recheck') {
     const r = await recheck(body.jql ? { jql: body.jql } : {});
     console.log(`recheck done: ${r.checked} checked, ${r.conflicts} in conflict`);
+    // decisions or their conflicts changed: refresh the Teamwork Graph copy
+    await syncGraph();
+  } else if (body.type === 'graph-sync') {
+    await syncGraph();
   } else if (body.type === 'scan-confluence') {
     const ids = await recentPageIds(body.limit || 50);
     let created = 0;

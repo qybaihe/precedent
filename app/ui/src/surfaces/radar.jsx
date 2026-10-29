@@ -45,6 +45,7 @@ function ConflictRow({ check, decisions, onOpenDecision, delay }) {
               <span className="tiny strong" style={{ color: 'var(--red)' }}>CONTRADICTS</span>
               <DecId id={x.decision.id} onClick={() => onOpenDecision(x.decision.id)} />
               <span className="small clamp-1">{x.decision.title}</span>
+              {x.outdated?.length ? <Pill tone="overdue" icon="clock">possibly outdated</Pill> : null}
             </div>
           ))}
           <div className="small muted">

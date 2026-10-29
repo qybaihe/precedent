@@ -120,6 +120,13 @@ function ConflictCard({ conflict, fix, issueKey, rovoOn, onAck, onException, onA
       <div className="mt-12">
         <DecisionMeta decision={d} />
       </div>
+      {conflict.outdated?.length ? (
+        <div className="mt-12">
+          <Banner tone="warning" title="This decision may be outdated" icon="clock">
+            {conflict.outdated.join(' · ')}. Check with {d.owner?.name || 'the owner'} before complying: it may need to be superseded.
+          </Banner>
+        </div>
+      ) : null}
       {!conflict.acknowledged && fix ? (
         <div className="mt-12">
           <FixCard fix={fix} decision={d} onApply={onApply} rovoOn={rovoOn} issueKey={issueKey} />

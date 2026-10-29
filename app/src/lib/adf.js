@@ -57,8 +57,11 @@ export function splitOwner(text) {
 
 /** First sentence, capped, used as a human-friendly title. */
 export function titleFrom(statement) {
-  const first = capitalize(statement.split(/(?<=[.!?;])\s|\s[—–]\s|;\s/)[0].replace(/[.;,]+$/, ''));
-  return first.length > 90 ? `${first.slice(0, 88).trimEnd()}…` : first;
+  let first = capitalize(statement.split(/(?<=[.!?;])\s|\s[—–]\s|;\s/)[0].replace(/[.;,]+$/, ''));
+  // a long first clause loses its parenthetical before it gets cut
+  if (first.length > 90) first = first.replace(/\s*\([^)]*\)?/g, '').trim();
+  if (first.length <= 90) return first;
+  return `${first.slice(0, 88).replace(/\s+\S*$/, '').replace(/[,;:]$/, '')}…`;
 }
 
 export function capitalize(text) {
